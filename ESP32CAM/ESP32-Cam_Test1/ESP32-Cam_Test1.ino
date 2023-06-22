@@ -6,6 +6,8 @@
 // #include <Arduino.h>
 #include "base64.h"
 #include <ArduinoJson.h>
+#include "OTA.h"
+
 
 
 
@@ -34,6 +36,8 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+
+  setupOTA("ESPCAM1", ssid, password);
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
@@ -91,6 +95,11 @@ void setup() {
 
 void loop() {
   // delay(5000);
+
+  #ifdef defined(ESP32_RTOS) && defined(ESP32)
+  #else
+    ArduinoOTA.handle();
+  #endif
 
   // To test this, I will make a pushbutton that can 
   // trigger a Photo
