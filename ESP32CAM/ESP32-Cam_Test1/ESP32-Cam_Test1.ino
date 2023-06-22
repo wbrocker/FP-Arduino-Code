@@ -88,6 +88,7 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("");
+  TelnetStream.println("WiFi Connected!");
   Serial.println("WiFi Connected!");
   Serial.print(WiFi.localIP());
   Serial.println("' to connect");
