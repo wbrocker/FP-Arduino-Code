@@ -6,6 +6,9 @@
 // #include <Arduino.h>
 #include "base64.h"
 #include <ArduinoJson.h>
+#include "OTA.h"
+#include <TelnetStream.h>
+
 
 
 
@@ -24,8 +27,10 @@ const int serverPort = 8000;              // Server Port
 WiFiClient client;
 
 // Pushbutton to test Photo Capture
-const int pushButton = 16;   // GPIO16
-// const int pirSensor = 16;            // PIR using GPIO16 - Also for Wakeup Feature
+//const int pushButton = 16;   // GPIO16
+const int pirInput = 12;            // PIR using GPIO16 - Also for Wakeup Feature
+int pirState = LOW;            // State is used for motion
+int val = 0;
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
 const char* boundary = "---WebKitBoundary";
@@ -34,10 +39,13 @@ void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
+
+  setupOTA("ESPCAM1", ssid, password);
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
-  pinMode(pushButton, INPUT);
+  //pinMode(pushButton, INPUT);
+  pinMode(pirInput, INPUT_PULLDOWN);
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -84,33 +92,71 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("");
+  TelnetStream.begin();
+  TelnetStream.println("WiFi Connected!");
   Serial.println("WiFi Connected!");
-  Serial.print(WiFi.localIP());
+  TelnetStream.println(WiFi.localIP());
+  //Serial.print(WiFi.localIP());
   Serial.println("' to connect");
 }
 
 void loop() {
   // delay(5000);
 
+  #ifdef defined(ESP32_RTOS) && defined(ESP32)
+  #else
+    ArduinoOTA.handle();
+  #endif
+
   // To test this, I will make a pushbutton that can 
   // trigger a Photo
-  int pushButtonState = digitalRead(pushButton);
+  //int pushButtonState = digitalRead(pushButton);
+  motionDetect();       // Check PIR for motion
+  delay(100);
 
-  if (pushButtonState == HIGH) {
-    Serial.println("Button High!");
+  //if (pushButtonState == HIGH) {
+  //  Serial.println("Button High!");
+  //  TelnetStream.println("Movement Detected!");
     //getCSRFToken();
-    testHttp();
-    sendPhoto7();
-  } 
+  //  testHttp();
+  //  sendPhoto7();
+  //} 
 }
+
+
+// Function to test PIR Sensor.
+void motionDetect() {
+  val = digitalRead(pirInput);    // Read the Input
+  Serial.println(val);
+  if (val == HIGH) {              // Confirm if Input is HIGH
+    if (pirState == LOW) {
+      // Motion was detected now.
+      TelnetStream.println("Motion detected!");
+      Serial.println("Motion Detected!");
+      pirState = HIGH;
+    }
+  } else {
+    Serial.println("State is LOW");
+    if (pirState == HIGH) {
+      // Motion stopped now
+      Serial.println("Motion Ended!");
+      TelnetStream.println("Motion Ended!");
+      pirState = LOW;
+    }
+  }
+}
+
 
 void sendPhoto7() {
 
   const char *server = "192.168.1.81"; // Server URL
-if (!client.connect(server, 8000))
+if (!client.connect(server, 8000)) {
+    TelnetStream.println("Connetion Failed!");
     Serial.println("Connection failed!");
-else
+} else
 {
+    TelnetStream.println("Capturing Photo");
+    
     camera_fb_t *fb = esp_camera_fb_get();
 
     String crlf = "\r\n";
@@ -144,7 +190,7 @@ else
     client.write(charBufKey);
     client.println();
     client.print(head);
-    Serial.println("second step");
+    TelnetStream.println("Sending the Photo!");
     uint8_t *fbBuf = fb->buf;
     size_t fbLen = fb->len;
     for (size_t n = 0; n < fbLen; n = n + 1024)
