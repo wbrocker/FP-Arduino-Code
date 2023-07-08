@@ -8,27 +8,27 @@
 #include <ArduinoJson.h>
 #include "OTA.h"
 #include <TelnetStream.h>
-
-
-
+#include "config.h"                     // Config.h keeps secret items like
+                                        // my WiFi Credentials.
 
 #define CAMERA_MODEL_AI_THINKER
 
 #include "camerapins.h"
 
-const char* ssid="Brocker";
-const char* password = "3134R3dd3rsburg";
 
-String serverName = "192.168.1.81";       // Server address for pictures
+String serverName = "192.168.1.31";       // Server address for pictures
 String serverPath = "/api/upload/";       // Upload URL for pictures
 const int cameraId = 1;                   // This is the camera identifier.
 const int serverPort = 8000;              // Server Port 
 
+unsigned long lastPicTaken = 0;           // Variable for when last pic was taken
+const unsigned long picInterval = 2000;   // Min interval between pictures (in ms)
+
 WiFiClient client;
 
 // Pushbutton to test Photo Capture
-//const int pushButton = 16;   // GPIO16
-const int pirInput = 12;            // PIR using GPIO16 - Also for Wakeup Feature
+const int pushButton = 16;        // GPIO16
+const int pirInput = 12;            // PIR using GPIO12 -
 int pirState = LOW;            // State is used for motion
 int val = 0;
 
@@ -44,7 +44,7 @@ void setup() {
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
-  //pinMode(pushButton, INPUT);
+  pinMode(pushButton, INPUT);
   pinMode(pirInput, INPUT_PULLDOWN);
 
   camera_config_t config;
@@ -110,17 +110,25 @@ void loop() {
 
   // To test this, I will make a pushbutton that can 
   // trigger a Photo
-  //int pushButtonState = digitalRead(pushButton);
-  motionDetect();       // Check PIR for motion
+  int pushButtonState = digitalRead(pushButton);
+  // motionDetect();       // Check PIR for motion
   delay(100);
 
-  //if (pushButtonState == HIGH) {
-  //  Serial.println("Button High!");
-  //  TelnetStream.println("Movement Detected!");
-    //getCSRFToken();
-  //  testHttp();
-  //  sendPhoto7();
-  //} 
+  if (pushButtonState == HIGH) {
+    Serial.println("Button High!");
+    TelnetStream.println("Movement Detected!");
+
+    // Check if enough time passed since last pic
+    if (millis() - lastPicTaken >= picInterval) {
+      //    getCSRFToken();
+      testHttp();
+      sendPhoto();            // Call the function to take picture and Send Photo
+      lastPicTaken = millis();
+    } else {
+      TelnetStream.println("Not enough time passed since last pic");
+    }
+
+  } 
 }
 
 
@@ -147,14 +155,20 @@ void motionDetect() {
 }
 
 
-void sendPhoto7() {
+void sendPhoto() {
 
-  const char *server = "192.168.1.81"; // Server URL
-if (!client.connect(server, 8000)) {
-    TelnetStream.println("Connetion Failed!");
-    Serial.println("Connection failed!");
-} else
-{
+    // Need to convert the serverName to a Character Array
+    int sName_len = serverName.length() + 1;
+    char server[sName_len];
+    serverName.toCharArray(server, sName_len);
+    
+//    const char *server = serverName; // Server URL
+    
+    if (!client.connect(server, 8000)) {
+        TelnetStream.println("Connetion Failed!");
+        Serial.println("Connection failed!");
+    } else
+    {
     TelnetStream.println("Capturing Photo");
     
     camera_fb_t *fb = esp_camera_fb_get();
@@ -218,74 +232,6 @@ if (!client.connect(server, 8000)) {
     // Serial.println(getBody);
   }
 }
-
-// Working bit to take picture!
-void sendPhoto6() {
-
-  const char *server = "192.168.1.81"; // Server URL
-if (!client.connect(server, 8000))
-    Serial.println("Connection failed!");
-else
-{
-    camera_fb_t *fb = esp_camera_fb_get();
-
-
-    Serial.println("Connection successful!");
-    String bound = "boundry";
-    String FirstConfigNameProj = "--" + bound + "\r\nContent-Disposition: form-data; name=\"cameraId\"" + "\r\n\r\n" + "1" + "";
-
-    String head = "--" + bound + "\r\nContent-Disposition: form-data; name=\"image\";filename=\"image.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
-    String tail = "\r\n--" + bound + "--\r\n";
-
-    uint32_t imageLen = fb->len;
-    uint32_t extraLen = head.length() + tail.length();
-    uint32_t totalLen = imageLen + extraLen;
-
-    client.println("POST " + serverPath + " HTTP/1.1");
-    client.println("Host: " + serverName);
-
-    // content length
-    uint32_t contentLength = FirstConfigNameProj.length() + totalLen;
-
-    // send post header
-
-    client.println("Content-Length: " + String(contentLength));
-    client.println("Content-Type: multipart/form-data; boundary=" + bound);
-    client.println();
-    char charBufKey[FirstConfigNameProj.length() + 1];
-    FirstConfigNameProj.toCharArray(charBufKey, FirstConfigNameProj.length() + 1);
-    client.write(charBufKey);
-    client.println();
-    client.print(head);
-    Serial.println("second step");
-    uint8_t *fbBuf = fb->buf;
-    size_t fbLen = fb->len;
-    for (size_t n = 0; n < fbLen; n = n + 1024)
-    {
-        if (n + 1024 < fbLen)
-        {
-            client.write(fbBuf, 1024);
-            fbBuf += 1024;
-        }
-        else if (fbLen % 1024 > 0)
-        {
-            size_t remainder = fbLen % 1024;
-            client.write(fbBuf, remainder);
-        }
-    }
-    client.print(tail);
-
-    esp_camera_fb_return(fb);
-
-    int timoutTimer = 10000;
-    long startTimer = millis();
-    boolean state = false;
-
-    client.stop();
-    // Serial.println(getBody);
-}
-}
-
 
 
 
