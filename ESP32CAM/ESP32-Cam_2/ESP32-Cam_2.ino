@@ -68,6 +68,7 @@ void add_json_object(char *tag, float value) {
 void getData() {
 //  TelnetStream.println("Retrieve all settings");'
   jsonDocument.clear();
+  add_json_object("cameraid", cameraId);
   add_json_object("flash", useLed);
   add_json_object("picInterval", picInterval);
 
