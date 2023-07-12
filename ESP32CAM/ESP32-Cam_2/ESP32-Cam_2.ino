@@ -6,14 +6,20 @@
 // #include <Arduino.h>
 #include "base64.h"
 #include <ArduinoJson.h>
+#include <WebServer.h>
 #include "OTA.h"
 #include <TelnetStream.h>
 #include "config.h"                     // Config.h keeps secret items like
                                         // my WiFi Credentials.
 
 #define CAMERA_MODEL_AI_THINKER
+#define LED_BUILTIN 4                   // Builtin LED on GPIO4
 
 #include "camerapins.h"
+
+WebServer server(80);
+StaticJsonDocument<250> jsonDocument;
+char buffer[250];
 
 
 String serverName = "192.168.1.31";       // Server address for pictures
@@ -22,7 +28,7 @@ const int cameraId = 2;                   // This is the camera identifier.
 const int serverPort = 8000;              // Server Port 
 
 unsigned long lastPicTaken = 0;           // Variable for when last pic was taken
-const unsigned long picInterval = 2000;   // Min interval between pictures (in ms)
+const unsigned long picInterval = 1000;   // Min interval between pictures (in ms)
 
 WiFiClient client;
 
@@ -31,9 +37,43 @@ const int pushButton = 16;        // GPIO16
 const int pirInput = 12;            // PIR using GPIO12 -
 int pirState = LOW;            // State is used for motion
 int val = 0;
+bool useLed = true;               // Using LE
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
 const char* boundary = "---WebKitBoundary";
+
+void setup_routing() {
+  server.on("/getdata", getData);
+
+  server.begin();
+}
+
+
+void create_json(char *tag, float value) {
+  jsonDocument.clear();
+  jsonDocument["type"] = tag;
+  jsonDocument["value"] = value;
+//  jsonDocument["unit"] = unit;
+  serializeJson(jsonDocument, buffer);
+}
+
+void add_json_object(char *tag, float value) {
+  JsonObject obj = jsonDocument.createNestedObject();
+  obj["type"] = tag;
+  obj["value"] = value;
+//  obj["unit"] = unit;
+}
+
+
+void getData() {
+//  TelnetStream.println("Retrieve all settings");'
+  jsonDocument.clear();
+  add_json_object("flash", useLed);
+  add_json_object("picInterval", picInterval);
+
+  serializeJson(jsonDocument, buffer);
+  server.send(200, "application/json", buffer);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -46,6 +86,9 @@ void setup() {
   // This will now be used to trigger the camera.
   pinMode(pushButton, INPUT);
   pinMode(pirInput, INPUT_PULLDOWN);
+
+  // Configure Builtin LED as Output
+  pinMode(LED_BUILTIN, OUTPUT);
 
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
@@ -101,6 +144,8 @@ void setup() {
   TelnetStream.println(WiFi.localIP());
   //Serial.print(WiFi.localIP());
   Serial.println("' to connect");
+
+  setup_routing();
 }
 
 void loop() {
@@ -116,6 +161,9 @@ void loop() {
   //int pushButtonState = digitalRead(pushButton);
   motionDetect();       // Check PIR for motion
   delay(100);
+
+  // Handle incoming Web Requests
+  server.handleClient();
 
 //  if (pushButtonState == HIGH) {
 //    Serial.println("Button High!");
@@ -145,7 +193,7 @@ void motionDetect() {
       TelnetStream.println("Motion detected!");
       Serial.println("Motion Detected!");
       if (millis() - lastPicTaken >= picInterval) {
-        testHttp();
+//        testHttp();
         sendPhoto();              // Call the function to take picture and Send Photo
         lastPicTaken = millis();
       }
@@ -212,8 +260,18 @@ void sendPhoto() {
     } else
     {
     TelnetStream.println("Capturing Photo");
+
+    if (useLed) {
+      digitalWrite(LED_BUILTIN, HIGH);
+      TelnetStream.println("Turning Flash on");
+      delay(500);
+    }
     
     camera_fb_t *fb = esp_camera_fb_get();
+
+    if (useLed) {
+      digitalWrite(LED_BUILTIN, LOW);
+    }
 //    flip_image_vertical(fb->buf, fb->width, fb->height, fb->format);
 //    flip_image_horizontal(fb->buf, fb->width, fb->height, fb->format);
 //    fb->set_hmirror(s, 1);                  // Horizontal Flip
