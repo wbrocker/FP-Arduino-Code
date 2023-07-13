@@ -18,8 +18,8 @@
 #include "camerapins.h"
 
 WebServer server(80);
-StaticJsonDocument<250> jsonDocument;
-char buffer[250];
+StaticJsonDocument<512> jsonDocument;
+char buffer[512];
 
 
 String serverName = "192.168.1.31";       // Server address for pictures
@@ -28,7 +28,7 @@ const int cameraId = 2;                   // This is the camera identifier.
 const int serverPort = 8000;              // Server Port 
 
 unsigned long lastPicTaken = 0;           // Variable for when last pic was taken
-const unsigned long picInterval = 1000;   // Min interval between pictures (in ms)
+unsigned long picInterval = 1000;   // Min interval between pictures (in ms)
 
 WiFiClient client;
 
@@ -37,14 +37,17 @@ const int pushButton = 16;        // GPIO16
 const int pirInput = 12;            // PIR using GPIO12 -
 int pirState = LOW;            // State is used for motion
 int val = 0;
-bool useLed = true;               // Using LE
+bool useLed = true;               // Using LED
+bool camStatus = true;            // Camera enabled/disabled
+const float firmwareVersion = 0.1;        // Firmware Version
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
 const char* boundary = "---WebKitBoundary";
 
 void setup_routing() {
   server.on("/getdata", getData);
-
+  server.on("/setdata", HTTP_POST, setData);
+  
   server.begin();
 }
 
@@ -53,7 +56,7 @@ void create_json(char *tag, float value) {
   jsonDocument.clear();
   jsonDocument["type"] = tag;
   jsonDocument["value"] = value;
-//  jsonDocument["unit"] = unit;
+
   serializeJson(jsonDocument, buffer);
 }
 
@@ -61,7 +64,6 @@ void add_json_object(char *tag, float value) {
   JsonObject obj = jsonDocument.createNestedObject();
   obj["type"] = tag;
   obj["value"] = value;
-//  obj["unit"] = unit;
 }
 
 
@@ -71,9 +73,24 @@ void getData() {
   add_json_object("cameraid", cameraId);
   add_json_object("flash", useLed);
   add_json_object("picInterval", picInterval);
+  add_json_object("camStatus", camStatus);
+  add_json_object("firmware", firmwareVersion);
 
   serializeJson(jsonDocument, buffer);
   server.send(200, "application/json", buffer);
+}
+
+// POST request to set data on the device
+void setData() {
+
+  String body = server.arg("plain");
+  deserializeJson(jsonDocument, body);
+
+  useLed = jsonDocument["flash"];
+  picInterval = jsonDocument["picInterval"];
+  camStatus = jsonDocument["camStatus"];
+
+  server.send(200, "application/json", "{}");
 }
 
 void setup() {
@@ -193,7 +210,7 @@ void motionDetect() {
       // Motion was detected now.
       TelnetStream.println("Motion detected!");
       Serial.println("Motion Detected!");
-      if (millis() - lastPicTaken >= picInterval) {
+      if ((millis() - lastPicTaken >= picInterval) && camStatus) {
 //        testHttp();
         sendPhoto();              // Call the function to take picture and Send Photo
         lastPicTaken = millis();
