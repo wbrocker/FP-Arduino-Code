@@ -39,14 +39,15 @@ int pirState = LOW;            // State is used for motion
 int val = 0;
 bool useLed = true;               // Using LED
 bool camStatus = true;            // Camera enabled/disabled
-const float firmwareVersion = 0.1;        // Firmware Version
+const float firmwareVersion = 0.11;        // Firmware Version
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
 const char* boundary = "---WebKitBoundary";
 
 void setup_routing() {
-  server.on("/getdata", getData);
-  server.on("/setdata", HTTP_POST, setData);
+  server.on("/getdata", getData);               // Retrieve device data
+  server.on("/takepic", takePic);               // Force pic
+  server.on("/setdata", HTTP_POST, setData);    // Set Data
   
   server.begin();
 }
@@ -79,6 +80,8 @@ void getData() {
   serializeJson(jsonDocument, buffer);
   server.send(200, "application/json", buffer);
 }
+
+void takePic(void);
 
 // POST request to set data on the device
 void setData() {
@@ -316,6 +319,7 @@ void sendPhoto() {
     uint32_t contentLength = FinalProj.length() + totalLen;
 
     // send post header
+    TelnetStream.println("Sending POST header...");
 
     client.println("Content-Length: " + String(contentLength));
     client.println("Content-Type: multipart/form-data; boundary=" + bound);
@@ -343,13 +347,17 @@ void sendPhoto() {
     }
     client.print(tail);
 
+    TelnetStream.println("Release FrameBufer!");
+    
     esp_camera_fb_return(fb);
 
-    int timoutTimer = 10000;
-    long startTimer = millis();
-    boolean state = false;
+//    int timoutTimer = 10000;
+//    long startTimer = millis();
+//    boolean state = false;
 
     client.stop();
+    
+    TelnetStream.println("Client Connection Stopped!");
     // Serial.println(getBody);
   }
 }
@@ -386,4 +394,12 @@ void testHttp() {
     // %s\n", http.errorToString(httpCode).c_str());
   }
   http.end();
+}
+
+
+void takePic() {
+  TelnetStream.println("Force Picture");
+  sendPhoto();
+
+  server.send(200, "application/json", "{}");
 }
