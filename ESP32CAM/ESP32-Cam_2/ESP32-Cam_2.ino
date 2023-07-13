@@ -42,7 +42,6 @@ bool camStatus = true;            // Camera enabled/disabled
 const float firmwareVersion = 0.11;        // Firmware Version
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
-const char* boundary = "---WebKitBoundary";
 
 void setup_routing() {
   server.on("/getdata", getData);               // Retrieve device data
@@ -150,7 +149,7 @@ void setup() {
 
   sensor_t * s = esp_camera_sensor_get();
   s->set_vflip(s, 1);
-  s->set_hmirror(s, 1);
+  s->set_hmirror(s, 0);
 
   // Start Wifi
   WiFi.begin(ssid, password);
@@ -215,9 +214,13 @@ void motionDetect() {
       TelnetStream.println("Motion detected!");
       Serial.println("Motion Detected!");
       if ((millis() - lastPicTaken >= picInterval) && camStatus) {
-//        testHttp();
-        sendPhoto();              // Call the function to take picture and Send Photo
-        lastPicTaken = millis();
+        if (useLed) {   // Enable Flash
+          // testHttp();
+          digitalWrite(LED_BUILTIN, HIGH);
+          delay(200);
+          sendPhoto();                // Call the function to take picture and Send Photo
+          lastPicTaken = millis();
+        }        
       }
       pirState = HIGH;
     }
@@ -233,45 +236,15 @@ void motionDetect() {
 }
 
 
-void flip_image_horizontal(uint8_t *image, size_t width, size_t height, pixformat_t format) {
-  size_t bytes_per_pixel = (format == PIXFORMAT_RGB888) ? 3 : 2;
-  size_t line_width = width * bytes_per_pixel;
-
-  for (size_t y = 0; y < height; y++) {
-    size_t line_start = y * line_width;
-    size_t line_end = line_start + line_width;
-    for (size_t x1 = line_start, x2 = line_end - bytes_per_pixel; x1 < line_end; x1 += bytes_per_pixel, x2 -= bytes_per_pixel) {
-      for (size_t b = 0; b < bytes_per_pixel; b++) {
-        uint8_t temp = image[x1 + b];
-        image[x1 + b] = image[x2 + b];
-        image[x2 + b] = temp;
-      }
-    }
-  }
-}
-
-void flip_image_vertical(uint8_t *image, size_t width, size_t height, pixformat_t format) {
-  size_t bytes_per_pixel = (format == PIXFORMAT_RGB888) ? 3 : 2;
-  size_t line_width = width * bytes_per_pixel;
-  uint8_t *temp_line = (uint8_t *)malloc(line_width);
-
-  for (size_t y1 = 0, y2 = (height - 1); y1 < y2; y1++, y2--) {
-    size_t line_start1 = y1 * line_width;
-    size_t line_start2 = y2 * line_width;
-    
-    memcpy(temp_line, &image[line_start1], line_width);
-    memcpy(&image[line_start1], &image[line_start2], line_width);
-    memcpy(&image[line_start2], temp_line, line_width);
-  }
-
-  free(temp_line);
-}
 
 
 // Function to take picture and send photo.
 String sendPhoto() {
   String getAll;
   String getBody;
+  HTTPClient http;
+
+  String boundary = "FinalProject";
 
   camera_fb_t * fb = NULL;
   fb = esp_camera_fb_get();
@@ -285,12 +258,14 @@ String sendPhoto() {
 
   if (client.connect(serverName.c_str(), serverPort)) {
     TelnetStream.println("Connection successful!");
-    // String head = "--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"image\"; filename=\"esp32-cam1.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
-    // head.concat("--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"cameraId\"\r\n\r\n5\r\n");
-    // head.concat("--RandomNerdTutorials\r\nContent-Disposition: form-data; filename=\"esp32-cam1.jpg\"\r\n\r\n");
-    // String tail = "\r\n--RandomNerdTutorials--\r\n";
+    String csrf = "csrftoken=";
+    csrf += csrfToken;
 
-    String boundary = "RandomNerdTutorials";
+    http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+    http.addHeader("Cookie", csrf); 
+    http.addHeader("X-CSRFToken", csrf);
+
+    
     String head = "--" + boundary + "\r\n";
     head += "Content-Disposition: form-data; name=\"image\"; filename=\"esp32-cam1.jpg\"\r\n";
     head += "Content-Type: image/jpeg\r\n\r\n";
@@ -309,7 +284,7 @@ String sendPhoto() {
     client.println("POST " + serverPath + " HTTP/1.1");
     client.println("Host: " + serverName);
     client.println("Content-Length: " + String(totalLen));
-    client.println("Content-Type: multipart/form-data; boundary=RandomNerdTutorials");
+    client.println("Content-Type: multipart/form-data; boundary=FinalProject");
     client.println();
     client.print(head);
 
@@ -367,7 +342,7 @@ void testHttp() {
 
   Serial.print("[HTTP] begin...\n");
 
-  http.begin("http://192.168.1.81:8000/api/upload/");
+  http.begin("http://192.168.1.31:8000/api/upload/");
 
   Serial.print("[HTTP GET...\n");
   int httpCode = http.GET();
@@ -396,6 +371,7 @@ void testHttp() {
 
 void takePic() {
   TelnetStream.println("Force Picture");
+  testHttp();
   sendPhoto();
 
   server.send(200, "application/json", "{}");
