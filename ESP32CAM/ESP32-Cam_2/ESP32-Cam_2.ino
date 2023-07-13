@@ -24,7 +24,7 @@ char buffer[512];
 
 String serverName = "192.168.1.31";       // Server address for pictures
 String serverPath = "/api/upload/";       // Upload URL for pictures
-const int cameraId = 2;                   // This is the camera identifier.
+const int cameraId = 1;                   // This is the camera identifier.
 const int serverPort = 8000;              // Server Port 
 
 unsigned long lastPicTaken = 0;           // Variable for when last pic was taken
@@ -150,6 +150,7 @@ void setup() {
 
   sensor_t * s = esp_camera_sensor_get();
   s->set_vflip(s, 1);
+  s->set_hmirror(s, 1);
 
   // Start Wifi
   WiFi.begin(ssid, password);
@@ -266,47 +267,40 @@ void flip_image_vertical(uint8_t *image, size_t width, size_t height, pixformat_
   free(temp_line);
 }
 
-void sendPhoto() {
 
-    // Need to convert the serverName to a Character Array
-    int sName_len = serverName.length() + 1;
-    char server[sName_len];
-    serverName.toCharArray(server, sName_len);
-    
-//    const char *server = serverName; // Server URL
-    
-    if (!client.connect(server, 8000)) {
-        TelnetStream.println("Connetion Failed!");
-        Serial.println("Connection failed!");
-    } else
-    {
-    TelnetStream.println("Capturing Photo");
+// Function to take picture and send photo.
+String sendPhoto() {
+  String getAll;
+  String getBody;
 
-    if (useLed) {
-      digitalWrite(LED_BUILTIN, HIGH);
-      TelnetStream.println("Turning Flash on");
-      delay(500);
-    }
-    
-    camera_fb_t *fb = esp_camera_fb_get();
+  camera_fb_t * fb = NULL;
+  fb = esp_camera_fb_get();
+  if(!fb) {
+    TelnetStream.println("Capture failed!!!");
+    delay(100);
+  }
 
-    if (useLed) {
-      digitalWrite(LED_BUILTIN, LOW);
-    }
-//    flip_image_vertical(fb->buf, fb->width, fb->height, fb->format);
-//    flip_image_horizontal(fb->buf, fb->width, fb->height, fb->format);
-//    fb->set_hmirror(s, 1);                  // Horizontal Flip
+  TelnetStream.println("Connecting to server...");
+  String cameraIdString = String(cameraId);
 
-    String crlf = "\r\n";
+  if (client.connect(serverName.c_str(), serverPort)) {
+    TelnetStream.println("Connection successful!");
+    // String head = "--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"image\"; filename=\"esp32-cam1.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+    // head.concat("--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"cameraId\"\r\n\r\n5\r\n");
+    // head.concat("--RandomNerdTutorials\r\nContent-Disposition: form-data; filename=\"esp32-cam1.jpg\"\r\n\r\n");
+    // String tail = "\r\n--RandomNerdTutorials--\r\n";
 
-    Serial.println("Connection successful!");
-    String bound = "boundry";
+    String boundary = "RandomNerdTutorials";
+    String head = "--" + boundary + "\r\n";
+    head += "Content-Disposition: form-data; name=\"image\"; filename=\"esp32-cam1.jpg\"\r\n";
+    head += "Content-Type: image/jpeg\r\n\r\n";
 
-    String FinalProj = "--" + bound + "\r\nContent-Disposition: form-data; name=\"X-CSRFToken\"\r\n\r\n" + csrfToken + "\r\n";
-    FinalProj.concat("--" + bound + "\r\nContent-Disposition: form-data; name=\"cameraId\"" + "\r\n\r\n" + String(cameraId));
+    String tail = "\r\n--" + boundary + "\r\n";
+    tail += "Content-Disposition: form-data; name=\"cameraId\"\r\n\r\n";
+    tail += cameraIdString + "\r\n";      //"5\r\n";
+    tail += "--" + boundary + "--\r\n";
 
-    String head = "--" + bound + "\r\nContent-Disposition: form-data; name=\"image\"; filename=\"image2.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
-    String tail = "\r\n--" + bound + "--\r\n";
+ 
 
     uint32_t imageLen = fb->len;
     uint32_t extraLen = head.length() + tail.length();
@@ -314,52 +308,55 @@ void sendPhoto() {
 
     client.println("POST " + serverPath + " HTTP/1.1");
     client.println("Host: " + serverName);
-
-    // content length
-    uint32_t contentLength = FinalProj.length() + totalLen;
-
-    // send post header
-    TelnetStream.println("Sending POST header...");
-
-    client.println("Content-Length: " + String(contentLength));
-    client.println("Content-Type: multipart/form-data; boundary=" + bound);
-    client.println();
-    char charBufKey[FinalProj.length() + 1];
-    FinalProj.toCharArray(charBufKey, FinalProj.length() + 1);
-    client.write(charBufKey);
+    client.println("Content-Length: " + String(totalLen));
+    client.println("Content-Type: multipart/form-data; boundary=RandomNerdTutorials");
     client.println();
     client.print(head);
-    TelnetStream.println("Sending the Photo!");
+
     uint8_t *fbBuf = fb->buf;
-    size_t fbLen = fb->len;
-    for (size_t n = 0; n < fbLen; n = n + 1024)
-    {
-        if (n + 1024 < fbLen)
-        {
-            client.write(fbBuf, 1024);
-            fbBuf += 1024;
-        }
-        else if (fbLen % 1024 > 0)
-        {
-            size_t remainder = fbLen % 1024;
-            client.write(fbBuf, remainder);
-        }
-    }
+      size_t fbLen = fb->len;
+    for (size_t n=0; n<fbLen; n=n+1024) {
+      if (n+1024 < fbLen) {
+        client.write(fbBuf, 1024);
+        fbBuf += 1024;
+      }
+      else if (fbLen%1024>0) {
+        size_t remainder = fbLen%1024;
+        client.write(fbBuf, remainder);
+      }
+    }   
     client.print(tail);
 
-    TelnetStream.println("Release FrameBufer!");
-    
     esp_camera_fb_return(fb);
 
-//    int timoutTimer = 10000;
-//    long startTimer = millis();
-//    boolean state = false;
-
-    client.stop();
+    int timoutTimer = 10000;
+    long startTimer = millis();
+    boolean state = false;
     
-    TelnetStream.println("Client Connection Stopped!");
-    // Serial.println(getBody);
+  while ((startTimer + timoutTimer) > millis()) {
+    Serial.print(".");
+    delay(100);      
+    while (client.available()) {
+      char c = client.read();
+      if (c == '\n') {
+        if (getAll.length()==0) { state=true; }
+        getAll = "";
+      }
+      else if (c != '\r') { getAll += String(c); }
+      if (state==true) { getBody += String(c); }
+      startTimer = millis();
+    }
+      if (getBody.length()>0) { break; }
+    }
+    Serial.println();
+    client.stop();
+    Serial.println(getBody);
   }
+    else {
+      getBody = "Connection to " + serverName +  " failed.";
+      Serial.println(getBody);
+    }
+    return getBody;
 }
 
 
