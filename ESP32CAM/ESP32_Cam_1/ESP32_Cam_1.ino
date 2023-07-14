@@ -24,7 +24,7 @@ char buffer[512];
 
 String serverName = "192.168.1.31";       // Server address for pictures
 String serverPath = "/api/upload/";       // Upload URL for pictures
-const int cameraId = 2;                   // This is the camera identifier.
+const int cameraId = 1;                   // This is the camera identifier.
 const int serverPort = 8000;              // Server Port 
 
 unsigned long lastPicTaken = 0;           // Variable for when last pic was taken
@@ -39,7 +39,7 @@ int pirState = LOW;            // State is used for motion
 int val = 0;
 bool useLed = true;               // Using LED
 bool camStatus = true;            // Camera enabled/disabled
-const float firmwareVersion = 0.11;        // Firmware Version
+const float firmwareVersion = 0.12;        // Firmware Version
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
 
@@ -100,7 +100,7 @@ void setup() {
   Serial.setDebugOutput(true);
   Serial.println();
 
-  setupOTA("ESPCAM2", ssid, password);
+  setupOTA("ESPCAM1", ssid, password);
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
@@ -186,21 +186,6 @@ void loop() {
   // Handle incoming Web Requests
   server.handleClient();
 
-//  if (pushButtonState == HIGH) {
-//    Serial.println("Button High!");
-//    TelnetStream.println("Movement Detected!");
-//
-//    // Check if enough time passed since last pic
-//    if (millis() - lastPicTaken >= picInterval) {
-//      //    getCSRFToken();
-//      testHttp();
-//      sendPhoto();            // Call the function to take picture and Send Photo
-//      lastPicTaken = millis();
-//    } else {
-//      TelnetStream.println("Not enough time passed since last pic");
-//    }
-//
-//  } 
 }
 
 
@@ -267,7 +252,7 @@ String sendPhoto() {
 
     
     String head = "--" + boundary + "\r\n";
-    head += "Content-Disposition: form-data; name=\"image\"; filename=\"esp32-cam2.jpg\"\r\n";
+    head += "Content-Disposition: form-data; name=\"image\"; filename=\"esp32-cam1.jpg\"\r\n";
     head += "Content-Type: image/jpeg\r\n\r\n";
 
     String tail = "\r\n--" + boundary + "\r\n";

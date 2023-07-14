@@ -24,7 +24,7 @@ char buffer[512];
 
 String serverName = "192.168.1.31";       // Server address for pictures
 String serverPath = "/api/upload/";       // Upload URL for pictures
-const int cameraId = 2;                   // This is the camera identifier.
+const int cameraId = 3;                   // This is the camera identifier.
 const int serverPort = 8000;              // Server Port 
 
 unsigned long lastPicTaken = 0;           // Variable for when last pic was taken
@@ -37,9 +37,9 @@ const int pushButton = 16;        // GPIO16
 const int pirInput = 12;            // PIR using GPIO12 -
 int pirState = LOW;            // State is used for motion
 int val = 0;
-bool useLed = true;               // Using LED
+bool useLed = false;               // Using LED
 bool camStatus = true;            // Camera enabled/disabled
-const float firmwareVersion = 0.11;        // Firmware Version
+const float firmwareVersion = 0.12;        // Firmware Version
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
 
@@ -100,7 +100,7 @@ void setup() {
   Serial.setDebugOutput(true);
   Serial.println();
 
-  setupOTA("ESPCAM2", ssid, password);
+  setupOTA("ESPCAM3", ssid, password);
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
@@ -261,13 +261,13 @@ String sendPhoto() {
     String csrf = "csrftoken=";
     csrf += csrfToken;
 
-    http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
-    http.addHeader("Cookie", csrf); 
-    http.addHeader("X-CSRFToken", csrf);
+    // http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
+    // http.addHeader("Cookie", csrf); 
+    // http.addHeader("X-CSRFToken", csrf);
 
     
     String head = "--" + boundary + "\r\n";
-    head += "Content-Disposition: form-data; name=\"image\"; filename=\"esp32-cam2.jpg\"\r\n";
+    head += "Content-Disposition: form-data; name=\"image\"; filename=\"cam3.jpg\"\r\n";
     head += "Content-Type: image/jpeg\r\n\r\n";
 
     String tail = "\r\n--" + boundary + "\r\n";
@@ -371,7 +371,7 @@ void testHttp() {
 
 void takePic() {
   TelnetStream.println("Force Picture");
-  testHttp();
+  // testHttp();
   sendPhoto();
 
   server.send(200, "application/json", "{}");
