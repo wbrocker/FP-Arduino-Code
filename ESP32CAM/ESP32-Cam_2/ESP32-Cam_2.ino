@@ -1,4 +1,6 @@
 // This is for the ESP32-Cam 2 Module
+// This is the Cam in the BLACK Casing 
+// without external Antenna
 
 #include "esp_camera.h"
 #include <WiFi.h>
@@ -8,11 +10,11 @@
 #include <WebServer.h>
 #include "OTA.h"
 #include <TelnetStream.h>
-#include "config.h"                     // Config.h keeps secret items like
-                                        // my WiFi Credentials.
+#include "config.h"                              // Config.h keeps secret items like
+                                                // my WiFi Credentials.
 
 #define CAMERA_MODEL_AI_THINKER
-#define LED_BUILTIN 4                   // Builtin LED on GPIO4
+#define LED_BUILTIN 4                           // Builtin LED on GPIO4
 
 #include "camerapins.h"
 
@@ -94,8 +96,8 @@ void setup() {
     config.jpeg_quality = 10;
     config.fb_count = 2;
   } else {
-    config.frame_size = FRAMESIZE_SVGA;
-    config.jpeg_quality = 12;
+    config.frame_size = FRAMESIZE_VGA;
+    config.jpeg_quality = 10;
     config.fb_count = 1;
   }
 
@@ -104,7 +106,9 @@ void setup() {
 
   sensor_t * s = esp_camera_sensor_get();
   s->set_vflip(s, 1);
-  s->set_hmirror(s, 0);
+  s->set_hmirror(s, 1);
+  s->set_contrast(s, 2);
+  s->set_saturation(s, -2);
 
   // Start Wifi
   WiFi.begin(ssid, password);
@@ -142,15 +146,15 @@ void loop() {
 
 // Function to test PIR Sensor.
 void motionDetect() {
-  val = digitalRead(pirInput);    // Read the Input
+  val = digitalRead(pirInput);                // Read the Input
   Serial.println(val);
-  if (val == HIGH) {              // Confirm if Input is HIGH
+  if (val == HIGH) {                          // Confirm if Input is HIGH
     if (pirState == LOW) {
       // Motion was detected now.
       TelnetStream.println("Motion detected!");
       Serial.println("Motion Detected!");
       if ((millis() - lastPicTaken >= picInterval) && camStatus) {
-        if (useLed) {   // Enable Flash
+        if (useLed) {                         // Enable Flash
           // getCSRF();
           digitalWrite(LED_BUILTIN, HIGH);    // Enable the Flash
           delay(200);
@@ -211,7 +215,7 @@ String sendPhoto() {
 
     String tail = "\r\n--" + boundary + "\r\n";
     tail += "Content-Disposition: form-data; name=\"cameraId\"\r\n\r\n";
-    tail += cameraIdString + "\r\n";      //"5\r\n";
+    tail += cameraIdString + "\r\n";
     tail += "--" + boundary + "--\r\n";
 
     uint32_t imageLen = fb->len;
@@ -279,7 +283,7 @@ void getCSRF() {
 
   Serial.print("[HTTP] begin...\n");
 
-  http.begin("http://192.168.1.31:8000/api/upload/");
+  http.begin("http://192.168.1.35:8000/api/upload/");
 
   Serial.print("[HTTP GET...\n");
   int httpCode = http.GET();
@@ -329,15 +333,16 @@ void add_json_object(char *tag, float value) {
   obj["value"] = value;
 }
 
-
+// Force a pic to be taken and uploaded.
 void takePic() {
   TelnetStream.println("Force Picture");
-  getCSRF();
+  // getCSRF();
   sendPhoto();
 
   server.send(200, "application/json", "{}");
 }
 
+// API to get current status of ESP32 Device
 void getStatus() {
   TelnetStream.println("Retrieve all settings");
   jsonDocument.clear();

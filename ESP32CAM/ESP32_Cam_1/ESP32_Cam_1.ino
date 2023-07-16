@@ -1,4 +1,6 @@
 // This is for the ESP32-Cam 1 Module
+// This is the Cam in the Grey Casing 
+// with external Antenna
 
 #include "esp_camera.h"
 #include <WiFi.h>
@@ -8,11 +10,11 @@
 #include <WebServer.h>
 #include "OTA.h"
 #include <TelnetStream.h>
-#include "config.h"                     // Config.h keeps secret items like
-                                        // my WiFi Credentials.
+#include "config.h"                            // Config.h keeps secret items like
+                                                 // my WiFi Credentials.
 
 #define CAMERA_MODEL_AI_THINKER
-#define LED_BUILTIN 4                   // Builtin LED on GPIO4
+#define LED_BUILTIN 4                           // Builtin LED on GPIO4
 
 #include "camerapins.h"
 
@@ -141,9 +143,9 @@ void loop() {
 
 // Function to test PIR Sensor.
 void motionDetect() {
-  val = digitalRead(pirInput);    // Read the Input
+  val = digitalRead(pirInput);                // Read the Input
   Serial.println(val);
-  if (val == HIGH) {              // Confirm if Input is HIGH
+  if (val == HIGH) {                          // Confirm if Input is HIGH
     if (pirState == LOW) {
       // Motion was detected now.
       TelnetStream.println("Motion detected!");
@@ -278,7 +280,7 @@ void getCSRF() {
 
   Serial.print("[HTTP] begin...\n");
 
-  http.begin("http://192.168.1.31:8000/api/upload/");
+  http.begin("http://192.168.1.35:8000/api/upload/");
 
   Serial.print("[HTTP GET...\n");
   int httpCode = http.GET();
