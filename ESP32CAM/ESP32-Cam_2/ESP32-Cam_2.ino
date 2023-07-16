@@ -1,9 +1,8 @@
-// This is for the ESP32-Cam Module
+// This is for the ESP32-Cam 2 Module
 
 #include "esp_camera.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
-// #include <Arduino.h>
 #include "base64.h"
 #include <ArduinoJson.h>
 #include <WebServer.h>
@@ -22,78 +21,34 @@ StaticJsonDocument<512> jsonDocument;
 char buffer[512];
 
 
-String serverName = "192.168.1.31";       // Server address for pictures
-String serverPath = "/api/upload/";       // Upload URL for pictures
-const int cameraId = 2;                   // This is the camera identifier.
-const int serverPort = 8000;              // Server Port 
+String serverName = "192.168.1.35";             // Server address for pictures
+String serverPath = "/api/upload/";             // Upload URL for pictures
+const int cameraId = 2;                         // This is the camera identifier.
+const int serverPort = 8000;                    // Server Port 
 
-unsigned long lastPicTaken = 0;           // Variable for when last pic was taken
-unsigned long picInterval = 1000;   // Min interval between pictures (in ms)
+unsigned long lastPicTaken = 0;                 // Variable for when last pic was taken
+unsigned long picInterval = 1000;               // Min interval between pictures (in ms)
 
 WiFiClient client;
 
 // Pushbutton to test Photo Capture
-const int pushButton = 16;        // GPIO16
-const int pirInput = 12;            // PIR using GPIO12 -
-int pirState = LOW;            // State is used for motion
+const int pirInput = 12;                        // PIR using GPIO12 -
+int pirState = LOW;                             // State is used for motion
 int val = 0;
-bool useLed = true;               // Using LED
-bool camStatus = true;            // Camera enabled/disabled
-const float firmwareVersion = 0.11;        // Firmware Version
+bool useLed = true;                             // Using LED
+bool camStatus = true;                          // Camera enabled/disabled
+const float firmwareVersion = 0.12;             // Firmware Version
 
-String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currentyl)
+String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currently)
 
-void setup_routing() {
-  server.on("/getdata", getData);               // Retrieve device data
-  server.on("/takepic", takePic);               // Force pic
-  server.on("/setdata", HTTP_POST, setData);    // Set Data
-  
-  server.begin();
-}
+// Function Declarations
+void setup_routing(void);                       // Routing for API's on Webserver
+void create_json(char *tag, float value);       // Creating JSON
+void add_json_object(char *tag, float value);   // Adding objects to JSON
+void getStatus(void);                           // Get Camera Status variables
+void takePic(void);                             // Force a PIC to be taken
+void setData(void);                             // POST request to set data on the device
 
-
-void create_json(char *tag, float value) {
-  jsonDocument.clear();
-  jsonDocument["type"] = tag;
-  jsonDocument["value"] = value;
-
-  serializeJson(jsonDocument, buffer);
-}
-
-void add_json_object(char *tag, float value) {
-  JsonObject obj = jsonDocument.createNestedObject();
-  obj["type"] = tag;
-  obj["value"] = value;
-}
-
-
-void getData() {
-//  TelnetStream.println("Retrieve all settings");'
-  jsonDocument.clear();
-  add_json_object("cameraid", cameraId);
-  add_json_object("flash", useLed);
-  add_json_object("picInterval", picInterval);
-  add_json_object("camStatus", camStatus);
-  add_json_object("firmware", firmwareVersion);
-
-  serializeJson(jsonDocument, buffer);
-  server.send(200, "application/json", buffer);
-}
-
-void takePic(void);
-
-// POST request to set data on the device
-void setData() {
-
-  String body = server.arg("plain");
-  deserializeJson(jsonDocument, body);
-
-  useLed = jsonDocument["flash"];
-  picInterval = jsonDocument["picInterval"];
-  camStatus = jsonDocument["camStatus"];
-
-  server.send(200, "application/json", "{}");
-}
 
 void setup() {
   Serial.begin(115200);
@@ -104,7 +59,7 @@ void setup() {
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
-  pinMode(pushButton, INPUT);
+//  pinMode(pushButton, INPUT);
   pinMode(pirInput, INPUT_PULLDOWN);
 
   // Configure Builtin LED as Output
@@ -133,7 +88,7 @@ void setup() {
   config.pixel_format = PIXFORMAT_JPEG;
 
   // if PSRAM IC present, init with UXGA resolution and higher JPEG quality
-  //                      for larger pre-allocated frame buffer.
+  // for larger pre-allocated frame buffer.
   if(psramFound()){
     config.frame_size = FRAMESIZE_UXGA;
     config.jpeg_quality = 10;
@@ -170,37 +125,18 @@ void setup() {
 }
 
 void loop() {
-  // delay(5000);
 
   #ifdef defined(ESP32_RTOS) && defined(ESP32)
   #else
     ArduinoOTA.handle();
   #endif
 
-  // To test this, I will make a pushbutton that can 
-  // trigger a Photo
-  //int pushButtonState = digitalRead(pushButton);
   motionDetect();       // Check PIR for motion
   delay(100);
 
   // Handle incoming Web Requests
   server.handleClient();
 
-//  if (pushButtonState == HIGH) {
-//    Serial.println("Button High!");
-//    TelnetStream.println("Movement Detected!");
-//
-//    // Check if enough time passed since last pic
-//    if (millis() - lastPicTaken >= picInterval) {
-//      //    getCSRFToken();
-//      testHttp();
-//      sendPhoto();            // Call the function to take picture and Send Photo
-//      lastPicTaken = millis();
-//    } else {
-//      TelnetStream.println("Not enough time passed since last pic");
-//    }
-//
-//  } 
 }
 
 
@@ -215,12 +151,18 @@ void motionDetect() {
       Serial.println("Motion Detected!");
       if ((millis() - lastPicTaken >= picInterval) && camStatus) {
         if (useLed) {   // Enable Flash
-          // testHttp();
-          digitalWrite(LED_BUILTIN, HIGH);
+          // getCSRF();
+          digitalWrite(LED_BUILTIN, HIGH);    // Enable the Flash
           delay(200);
-          sendPhoto();                // Call the function to take picture and Send Photo
-          lastPicTaken = millis();
-        }        
+          sendPhoto();                        // Call the function to take picture and Send Photo
+          digitalWrite(LED_BUILTIN, LOW);     // Disable the Flash
+        } else {
+          // Take picture without the Flash
+          sendPhoto();       
+        }
+
+        // Update when last Picture was taken.
+        lastPicTaken = millis();
       }
       pirState = HIGH;
     }
@@ -234,9 +176,6 @@ void motionDetect() {
     }
   }
 }
-
-
-
 
 // Function to take picture and send photo.
 String sendPhoto() {
@@ -274,8 +213,6 @@ String sendPhoto() {
     tail += "Content-Disposition: form-data; name=\"cameraId\"\r\n\r\n";
     tail += cameraIdString + "\r\n";      //"5\r\n";
     tail += "--" + boundary + "--\r\n";
-
- 
 
     uint32_t imageLen = fb->len;
     uint32_t extraLen = head.length() + tail.length();
@@ -336,8 +273,8 @@ String sendPhoto() {
 
 
 
-// Function to retrive the CSRF Token
-void testHttp() {
+// Function to retrieve the CSRF Token
+void getCSRF() {
   HTTPClient http;
 
   Serial.print("[HTTP] begin...\n");
@@ -369,10 +306,60 @@ void testHttp() {
 }
 
 
+void setup_routing() {
+  server.on("/getstatus", getStatus);           // Retrieve device data
+  server.on("/takepic", takePic);               // Force pic
+  server.on("/setdata", HTTP_POST, setData);    // Set Data
+  
+  server.begin();
+}
+
+
+void create_json(char *tag, float value) {
+  jsonDocument.clear();
+  jsonDocument["type"] = tag;
+  jsonDocument["value"] = value;
+
+  serializeJson(jsonDocument, buffer);
+}
+
+void add_json_object(char *tag, float value) {
+  JsonObject obj = jsonDocument.createNestedObject();
+  obj["type"] = tag;
+  obj["value"] = value;
+}
+
+
 void takePic() {
   TelnetStream.println("Force Picture");
-  testHttp();
+  getCSRF();
   sendPhoto();
+
+  server.send(200, "application/json", "{}");
+}
+
+void getStatus() {
+  TelnetStream.println("Retrieve all settings");
+  jsonDocument.clear();
+  add_json_object("cameraid", cameraId);
+  add_json_object("flash", useLed);
+  add_json_object("picInterval", picInterval);
+  add_json_object("camStatus", camStatus);
+  add_json_object("firmware", firmwareVersion);
+
+  serializeJson(jsonDocument, buffer);
+  server.send(200, "application/json", buffer);
+}
+
+// POST request to set data on the device
+void setData() {
+  TelnetStream.println("Set Data Function called!");
+  String body = server.arg("plain");
+  deserializeJson(jsonDocument, body);
+
+  useLed = jsonDocument["flash"];
+  picInterval = jsonDocument["picInterval"];
+  camStatus = jsonDocument["camStatus"];
 
   server.send(200, "application/json", "{}");
 }
