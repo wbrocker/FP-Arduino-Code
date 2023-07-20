@@ -39,7 +39,7 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const float firmwareVersion = 0.12;             // Firmware Version
+const String firmwareVersion = "0.13";             // Firmware Version
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currently)
 
@@ -326,8 +326,9 @@ void create_json(char *tag, float value) {
 
 void add_json_object(char *tag, float value) {
   JsonObject obj = jsonDocument.createNestedObject();
-  obj["type"] = tag;
-  obj["value"] = value;
+  // obj["type"] = tag;
+  // obj["value"] = value;
+  obj[tag] = value;
 }
 
 
@@ -342,11 +343,11 @@ void takePic() {
 void getStatus() {
   TelnetStream.println("Retrieve all settings");
   jsonDocument.clear();
-  add_json_object("cameraid", cameraId);
-  add_json_object("flash", useLed);
-  add_json_object("picInterval", picInterval);
-  add_json_object("camStatus", camStatus);
-  add_json_object("firmware", firmwareVersion);
+  jsonDocument["cameraid"] = cameraId;
+  jsonDocument["flash"] = useLed;
+  jsonDocument["picInterval"] = picInterval;
+  jsonDocument["camStatus"] = camStatus;
+  jsonDocument["firmware"] = firmwareVersion;
 
   serializeJson(jsonDocument, buffer);
   server.send(200, "application/json", buffer);
