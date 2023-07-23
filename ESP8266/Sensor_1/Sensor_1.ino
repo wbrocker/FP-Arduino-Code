@@ -18,8 +18,11 @@ char buffer[512];
 
 String serverName = "192.168.1.35";             // Server address for pictures
 // String serverPath = "/api/upload/";             // Upload URL for pictures
+String serverPath = "/devices/register/";       // Registration Endpoint
 const int Id = 1;                         // This is the camera identifier.
 const int serverPort = 8000;                    // Server Port 
+String hostName = "ESP2-Sensor";                   // Setting the Device Hostname
+String firmware = "0.1";
 int counter = 0;
 bool ledStatus = false;
 
@@ -79,6 +82,35 @@ void setup() {
   // Serial.println("' to connect");
 
   // updateLocaleVariables();                  // Push local vars to Controller.
+
+  // Connecting to the Server
+  if (client.connect(serverName, serverPort)) {
+    Serial.println("Connected to the Server!");
+
+    // REST Request
+    // Serial.print(String("GET ") + serverPath + " HTTP/1.1\r\n" +
+    //               "Host: " + serverName + "\r\n" +
+    //               "Connection: close\r\n\r\n");
+
+    String parameters = "?ip=" + WiFi.localIP().toString() + "&type=SEN&host=" + hostName;
+
+    client.print(String("GET ") + serverPath + parameters +" HTTP/1.1\r\n" +
+              "Host: " + serverName + "\r\n" +
+              "Connection: close\r\n\r\n");
+
+    // Wait for the server response
+    while (client.available()) {
+      Serial.println("Getting Device Configs");
+      String line = client.readStringUntil('\r');
+      Serial.print(line);
+    }
+
+    Serial.println("Response Received.");
+    client.stop();
+  } else {
+    Serial.println("Connection to the server failed!");
+  }
+
 }
 
 void loop() {
@@ -89,6 +121,8 @@ void loop() {
   delay(1000);
   ledStatus = !ledStatus;
   digitalWrite(LED, ledStatus);
+
+
 
 }
 
