@@ -32,6 +32,7 @@ unsigned long lastPicTaken = 0;                 // Variable for when last pic wa
 unsigned long picInterval = 1000;               // Min interval between pictures (in ms)
 
 WiFiClient client;
+HTTPClient http;
 
 // Pushbutton to test Photo Capture
 const int pirInput = 12;                        // PIR using GPIO12 -
@@ -130,7 +131,7 @@ void setup() {
 
   setup_routing();
   getCSRF();
-  delay(2000);
+  // delay(2000);
   updateLocaleVariables();                  // Push local vars to Controller.
 }
 
@@ -149,11 +150,11 @@ void loop() {
 
 
   // Notify the host of the system
-  if (updatedHost == false) {
-    TelnetStream.println("UpdatedHOst is False!");
-    updateLocaleVariables();
-    updatedHost = true;
-  }
+  // if (updatedHost == false) {
+  //   TelnetStream.println("UpdatedHOst is False!");
+  //   updateLocaleVariables();
+  //   updatedHost = true;
+  // }
 
 }
 
@@ -371,7 +372,7 @@ void getStatus() {
   server.send(200, "application/json", buffer);
 
 
- updateLocaleVariables();
+//  updateLocaleVariables();
   
   
 }
@@ -391,7 +392,7 @@ void setData() {
 }
 
 void updateLocaleVariables() {
-  HTTPClient http;
+  // HTTPClient http;
 
   Serial.print("[HTTP] registration...\n");
   TelnetStream.print("[HTTP] registration...\n");
@@ -406,38 +407,50 @@ void updateLocaleVariables() {
   // url += "&type=CAM";
 
   // TelnetStream.println(url);
-  String url = "http://192.168.1.35:8000/devices/register/?ip=192.168.1.32&host=test&type=CAM";
+  String url = "http://192.168.1.35:8000/devices/register/?ip=192.168.1.32&host=test&type=CAM&firmware=0.14";
 
-  http.begin(url);
+  Serial.println(url);
 
-  Serial.print("[HTTP GET...\n");
-  int httpCode = http.GET();
+  http.useHTTP10(true);
+  http.begin(client, url);
+  http.GET();
 
-  if(httpCode > 0) {
-    Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+  DynamicJsonDocument doc(1024);
+  deserializeJson(doc, http.getStream());
 
-    if (httpCode == HTTP_CODE_OK) {
-      // Parse JSON Response
-      const size_t capacity = JSON_OBJECT_SIZE(6) + 150;
-      DynamicJsonDocument doc(capacity);
-      DeserializationError error = deserializeJson(doc, http.getString());
-      if (error) {
-        Serial.print("deserializeJson() failed: ");
-        TelnetStream.print("deserializeJson() failed: ");
-        Serial.println(error.f_str());
-        http.end();
-        return;
-      }
+
+
+
+  // http.begin(url);
+
+  // Serial.print("[HTTP GET...\n");
+  // int httpCode = http.GET();
+
+  // if(httpCode > 0) {
+  //   Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+
+  //   if (httpCode == HTTP_CODE_OK) {
+  //     // Parse JSON Response
+  //     const size_t capacity = JSON_OBJECT_SIZE(6) + 150;
+  //     DynamicJsonDocument doc(capacity);
+  //     DeserializationError error = deserializeJson(doc, http.getString());
+  //     if (error) {
+  //       Serial.print("deserializeJson() failed: ");
+  //       TelnetStream.print("deserializeJson() failed: ");
+  //       Serial.println(error.f_str());
+  //       http.end();
+  //       return;
+  //     }
 
       // Extract JSON
       useLed = doc["flash"];
       picInterval = doc["picInterval"];
       camStatus = doc["camStatus"];
       sleepMode = doc["sleep"];
-      } else {
-        TelnetStream.print("HTTP request failed with error: ");
-        TelnetStream.println(httpCode);
-      }
+      // } else {
+      //   TelnetStream.print("HTTP request failed with error: ");
+      //   TelnetStream.println(httpCode);
+      // }
     http.end();
-  }
+  // }
 }
