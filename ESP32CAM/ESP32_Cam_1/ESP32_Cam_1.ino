@@ -32,6 +32,7 @@ unsigned long lastPicTaken = 0;                 // Variable for when last pic wa
 unsigned long picInterval = 1000;               // Min interval between pictures (in ms)
 
 WiFiClient client;
+HTTPClient http;
 
 // Pushbutton to test Photo Capture
 const int pirInput = 12;                        // PIR using GPIO12 -
@@ -39,7 +40,11 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const float firmwareVersion = 0.12;             // Firmware Version
+const String firmwareVersion = "0.14";          // Firmware Version
+bool sleepMode = false;                         // Sleep mode flag
+const String hostname = "ESP-CAM-1";            // Hostname
+bool updatedHost = false;                       // Bool to indicate if host updated
+String ip_addr = "";
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currently)
 
@@ -50,6 +55,7 @@ void add_json_object(char *tag, float value);   // Adding objects to JSON
 void getStatus(void);                           // Get Camera Status variables
 void takePic(void);                             // Force a PIC to be taken
 void setData(void);                             // POST request to set data on the device
+void updateLocaleVariables(void);               // UPdate local variables.
 
 
 void setup() {
@@ -119,10 +125,14 @@ void setup() {
   TelnetStream.println("WiFi Connected!");
   Serial.println("WiFi Connected!");
   TelnetStream.println(WiFi.localIP());
+  ip_addr = WiFi.localIP().toString();
   //Serial.print(WiFi.localIP());
   Serial.println("' to connect");
 
   setup_routing();
+  getCSRF();
+  // delay(2000);
+  updateLocaleVariables();                  // Push local vars to Controller.
 }
 
 void loop() {
@@ -137,6 +147,14 @@ void loop() {
 
   // Handle incoming Web Requests
   server.handleClient();
+
+
+  // Notify the host of the system
+  // if (updatedHost == false) {
+  //   TelnetStream.println("UpdatedHOst is False!");
+  //   updateLocaleVariables();
+  //   updatedHost = true;
+  // }
 
 }
 
@@ -326,8 +344,9 @@ void create_json(char *tag, float value) {
 
 void add_json_object(char *tag, float value) {
   JsonObject obj = jsonDocument.createNestedObject();
-  obj["type"] = tag;
-  obj["value"] = value;
+  // obj["type"] = tag;
+  // obj["value"] = value;
+  obj[tag] = value;
 }
 
 
@@ -342,14 +361,20 @@ void takePic() {
 void getStatus() {
   TelnetStream.println("Retrieve all settings");
   jsonDocument.clear();
-  add_json_object("cameraid", cameraId);
-  add_json_object("flash", useLed);
-  add_json_object("picInterval", picInterval);
-  add_json_object("camStatus", camStatus);
-  add_json_object("firmware", firmwareVersion);
+  jsonDocument["cameraid"] = cameraId;
+  jsonDocument["flash"] = useLed;
+  jsonDocument["picInterval"] = picInterval;
+  jsonDocument["camStatus"] = camStatus;
+  jsonDocument["firmware"] = firmwareVersion;
+  jsonDocument["sleep"] = sleepMode;
 
   serializeJson(jsonDocument, buffer);
   server.send(200, "application/json", buffer);
+
+
+//  updateLocaleVariables();
+  
+  
 }
 
 // POST request to set data on the device
@@ -361,6 +386,71 @@ void setData() {
   useLed = jsonDocument["flash"];
   picInterval = jsonDocument["picInterval"];
   camStatus = jsonDocument["camStatus"];
+  sleepMode = jsonDocument["sleep"];
 
   server.send(200, "application/json", "{}");
+}
+
+void updateLocaleVariables() {
+  // HTTPClient http;
+
+  Serial.print("[HTTP] registration...\n");
+  TelnetStream.print("[HTTP] registration...\n");
+
+  // String url = "http://";
+  // url += serverName + ":";
+  // url += String() + serverPort;
+  // url += "/devices/register";
+
+  // url += "?ip=" + ip_addr;
+  // url += "&host=" + hostname;
+  // url += "&type=CAM";
+
+  // TelnetStream.println(url);
+  String url = "http://192.168.1.35:8000/devices/register/?ip=192.168.1.32&host=test&type=CAM&firmware=0.14";
+
+  Serial.println(url);
+
+  http.useHTTP10(true);
+  http.begin(client, url);
+  http.GET();
+
+  DynamicJsonDocument doc(1024);
+  deserializeJson(doc, http.getStream());
+
+
+
+
+  // http.begin(url);
+
+  // Serial.print("[HTTP GET...\n");
+  // int httpCode = http.GET();
+
+  // if(httpCode > 0) {
+  //   Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+
+  //   if (httpCode == HTTP_CODE_OK) {
+  //     // Parse JSON Response
+  //     const size_t capacity = JSON_OBJECT_SIZE(6) + 150;
+  //     DynamicJsonDocument doc(capacity);
+  //     DeserializationError error = deserializeJson(doc, http.getString());
+  //     if (error) {
+  //       Serial.print("deserializeJson() failed: ");
+  //       TelnetStream.print("deserializeJson() failed: ");
+  //       Serial.println(error.f_str());
+  //       http.end();
+  //       return;
+  //     }
+
+      // Extract JSON
+      useLed = doc["flash"];
+      picInterval = doc["picInterval"];
+      camStatus = doc["camStatus"];
+      sleepMode = doc["sleep"];
+      // } else {
+      //   TelnetStream.print("HTTP request failed with error: ");
+      //   TelnetStream.println(httpCode);
+      // }
+    http.end();
+  // }
 }
