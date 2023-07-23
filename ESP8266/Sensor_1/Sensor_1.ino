@@ -8,6 +8,7 @@
 #include "OTA.h"
 #include <TelnetStream.h>
 #include "config.h"
+#include <ESP8266HTTPClient.h>
 
 #define LED 2
 
@@ -27,6 +28,7 @@ int counter = 0;
 bool ledStatus = false;
 
 WiFiClient client;
+HTTPClient http;
 
 bool alarm = false;
 
@@ -65,51 +67,24 @@ void setup() {
 
   setupOTA("ESP-SEN1", ssid, password);
 
-  // // Start Wifi
-  // WiFi.begin(ssid, password);
+  String parameters = "?ip=" + WiFi.localIP().toString() + "&type=SEN&host=" + hostName + "&firmware=" + firmware;
+  String url = "http://" + String(serverName) + ":" + serverPort + serverPath + parameters;
 
-  // while (WiFi.status() != WL_CONNECTED) {
-  //   delay(500);
-  //   Serial.print(".");
-  // }
-  // Serial.println("");
-  // TelnetStream.begin();
-  // TelnetStream.println("WiFi Connected!");
-  // Serial.println("WiFi Connected!");
-  // TelnetStream.println(WiFi.localIP());
-  // ip_addr = WiFi.localIP().toString();
-  // //Serial.print(WiFi.localIP());
-  // Serial.println("' to connect");
+  Serial.println(url + parameters);
 
-  // updateLocaleVariables();                  // Push local vars to Controller.
+  http.useHTTP10(true);
+  http.begin(client, url);
+  http.GET();
 
-  // Connecting to the Server
-  if (client.connect(serverName, serverPort)) {
-    Serial.println("Connected to the Server!");
+  DynamicJsonDocument doc(2048);
+  deserializeJson(doc, http.getStream());
 
-    // REST Request
-    // Serial.print(String("GET ") + serverPath + " HTTP/1.1\r\n" +
-    //               "Host: " + serverName + "\r\n" +
-    //               "Connection: close\r\n\r\n");
+  Serial.println(doc["alarm"].as<long>());
+  Serial.println(doc["sensorid"].as<long>());
 
-    String parameters = "?ip=" + WiFi.localIP().toString() + "&type=SEN&host=" + hostName;
+  http.end();
 
-    client.print(String("GET ") + serverPath + parameters +" HTTP/1.1\r\n" +
-              "Host: " + serverName + "\r\n" +
-              "Connection: close\r\n\r\n");
 
-    // Wait for the server response
-    while (client.available()) {
-      Serial.println("Getting Device Configs");
-      String line = client.readStringUntil('\r');
-      Serial.print(line);
-    }
-
-    Serial.println("Response Received.");
-    client.stop();
-  } else {
-    Serial.println("Connection to the server failed!");
-  }
 
 }
 
