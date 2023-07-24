@@ -84,8 +84,6 @@ void setup() {
 
   http.end();
 
-
-
 }
 
 void loop() {

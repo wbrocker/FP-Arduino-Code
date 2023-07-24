@@ -25,6 +25,7 @@ char buffer[512];
 
 String serverName = "192.168.1.35";             // Server address for pictures
 String serverPath = "/api/upload/";             // Upload URL for pictures
+String registerPath = "/devices/register/";     // Registration URL
 const int cameraId = 2;                         // This is the camera identifier.
 const int serverPort = 8000;                    // Server Port 
 
@@ -32,6 +33,7 @@ unsigned long lastPicTaken = 0;                 // Variable for when last pic wa
 unsigned long picInterval = 1000;               // Min interval between pictures (in ms)
 
 WiFiClient client;
+HTTPClient http;
 
 // Pushbutton to test Photo Capture
 const int pirInput = 12;                        // PIR using GPIO12 -
@@ -39,7 +41,11 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const String firmwareVersion = "0.13";             // Firmware Version
+const String firmwareVersion = "0.16";          // Firmware Version
+bool sleepMode = false;                         // Sleep mode flag
+const String hostname = "ESP-CAM-2";            // Hostname
+bool updatedHost = false;                       // Bool to indicate if host updated
+String ip_addr = "";                            // String to hold IP Address
 
 String csrfToken = "";                          // Placeholder for Django csrfToken (Not used currently)
 
@@ -50,6 +56,7 @@ void add_json_object(char *tag, float value);   // Adding objects to JSON
 void getStatus(void);                           // Get Camera Status variables
 void takePic(void);                             // Force a PIC to be taken
 void setData(void);                             // POST request to set data on the device
+int registerDevice(void);                       // UPdate local variables.
 
 
 void setup() {
@@ -61,7 +68,7 @@ void setup() {
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
-//  pinMode(pushButton, INPUT);
+  //  pinMode(pushButton, INPUT);
   pinMode(pirInput, INPUT_PULLDOWN);
 
   // Configure Builtin LED as Output
@@ -141,6 +148,27 @@ void loop() {
   // Handle incoming Web Requests
   server.handleClient();
 
+  // Register this device with the controller
+  // and pull latest settings.
+  if (!updatedHost) {
+    Serial.println("Updating local variables");
+    if (registerDevice() == 200) {                  // Push local vars to Controller.
+      Serial.println("Registraton done");
+      updatedHost = true;
+    }
+  }
+
+  // Check WiFi Connection
+  if ((WiFi.status() != WL_CONNECTED)) {
+    // Host need to re-register
+    updatedHost = false;
+    Serial.println("Lost Connection!");
+    // WiFi.reconnect();
+    WiFi.disconnect();
+    
+    WiFi.reconnect();
+    delay(10000);
+  }
 }
 
 
@@ -171,7 +199,7 @@ void motionDetect() {
       pirState = HIGH;
     }
   } else {
-    Serial.println("State is LOW");
+    // Serial.println("State is LOW");
     if (pirState == HIGH) {
       // Motion stopped now
       Serial.println("Motion Ended!");
@@ -351,6 +379,7 @@ void getStatus() {
   jsonDocument["picInterval"] = picInterval;
   jsonDocument["camStatus"] = camStatus;
   jsonDocument["firmware"] = firmwareVersion;
+  jsonDocument["sleep"] = sleepMode;
 
   serializeJson(jsonDocument, buffer);
   server.send(200, "application/json", buffer);
@@ -365,6 +394,38 @@ void setData() {
   useLed = jsonDocument["flash"];
   picInterval = jsonDocument["picInterval"];
   camStatus = jsonDocument["camStatus"];
+  sleepMode = jsonDocument["sleep"];
 
   server.send(200, "application/json", "{}");
+}
+
+// Function to Register the device at the Controller
+int registerDevice() {
+  HTTPClient http1;
+
+  String parameters = "?ip=" + WiFi.localIP().toString() + "&type=CAM&host=" + hostname + "&firmware=" + firmwareVersion;
+  String url = "http://" + String(serverName) + ":" + serverPort + registerPath + parameters;
+
+  http1.useHTTP10(true);
+  http1.begin(url);
+  int httpCode = http1.GET();
+
+  if (httpCode == 200) {
+    StaticJsonDocument<256> doc;
+    DeserializationError error = deserializeJson(doc, http1.getStream());
+
+    if (error) {
+      Serial.println("Failed to parse JSON");
+      Serial.println(error.c_str());
+      return 404;
+    }
+
+    // Extract JSON
+    useLed = doc["flash"];
+    picInterval = doc["picInterval"];
+    camStatus = doc["camStatus"];
+    sleepMode = doc["sleep"];
+  }
+  http1.end();
+  return httpCode;
 }
