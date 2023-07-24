@@ -30,7 +30,7 @@ bool ledStatus = false;
 WiFiClient client;
 HTTPClient http;
 
-bool alarm = false;
+bool alarm = false;             // Is the overall Alarm sounding
 
 void setup_wifi() {
 
