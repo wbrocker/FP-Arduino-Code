@@ -9,8 +9,15 @@
 #include <TelnetStream.h>
 #include "config.h"
 #include <ESP8266HTTPClient.h>
+#include "DHT.h"
+#include <PubSubClient.h>
 
 #define LED 2
+
+// Declaration of MQTT Topics
+#define MQTT_TEMP "esp2/temp"
+#define MQTT_HUM "esp2/hum"
+#define MQTT_ALARM "alarm"
 
 // WebServer server(80);
 StaticJsonDocument<512> jsonDocument;
@@ -26,11 +33,33 @@ String hostName = "ESP2-Sensor";                   // Setting the Device Hostnam
 String firmware = "0.1";
 int counter = 0;
 bool ledStatus = false;
+bool updatedHost = false;
 
-WiFiClient client;
+WiFiClient espClient;
 HTTPClient http;
+PubSubClient client(espClient);
+
+unsigned long lastMsg = 0;
+#define MSG_BUFFER_SIZE (50)
+char msg[MSG_BUFFER_SIZE];
+
+const int temp_hum_pin = D1;    // DHT Pin
+
+// Initialise DHT22 Component
+DHT dht(temp_hum_pin, DHT22);
 
 bool alarm = false;             // Is the overall Alarm sounding
+
+String temp_String;
+char tempString[20];            // Placeholder for MQTT Messages
+
+// Variables for sensors
+int extTemp = 0;
+int hum = 0;
+int temperature = 0;
+int humidity = 0;
+bool alarm_visual = false;
+bool alarm_audible = false;
 
 void setup_wifi() {
 
@@ -56,34 +85,114 @@ void setup_wifi() {
 }
 
 
-void setup() {
-  Serial.begin(115200);
-  Serial.setDebugOutput(true);
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+
+  String message = "";
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+    message += (char)payload[i];
+  }
   Serial.println();
 
-  setup_wifi();
+  // Check if it matches any topic
+  if (strcmp(topic, MQTT_ALARM) == 0) {     // Alarm Topic Raised
+    if (message.toInt() == 1) {             // Raise Alarm
+      alarm = true;
+    } else {
+      alarm = false;
+    }
+  }
+}
 
-  pinMode(LED, OUTPUT);
+// Reconnect to MQTT
+void reconnect() {
+  // Loop until we are connected
+  while (!client.connected()) {
+    Serial.println("Attempting to connect to MQTT");
+    // Create random clientid
+    String clientId = "ESP8266Client-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client.connect(clientId.c_str(), "mqttuser", "mqttpass")) {
+      Serial.println("Connected!");
+      // Publish announcement
+      client.publish("esp/announce", "Hello ESP2");
+      // Subscribe to topics
+      client.subscribe("inTopic");
+      client.subscribe("alarm");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds...");
+      delay(5000);
+    }
+  }
+}
 
-  setupOTA("ESP-SEN1", ssid, password);
-
+int registerDevice() {
   String parameters = "?ip=" + WiFi.localIP().toString() + "&type=SEN&host=" + hostName + "&firmware=" + firmware;
   String url = "http://" + String(serverName) + ":" + serverPort + serverPath + parameters;
 
   Serial.println(url + parameters);
 
   http.useHTTP10(true);
-  http.begin(client, url);
-  http.GET();
+  http.begin(espClient, url);
+  int httpCode = http.GET();
 
-  DynamicJsonDocument doc(2048);
-  deserializeJson(doc, http.getStream());
+  if (httpCode == 200) {
 
-  Serial.println(doc["alarm"].as<long>());
-  Serial.println(doc["sensorid"].as<long>());
+    DynamicJsonDocument doc(2048);
+    deserializeJson(doc, http.getStream());
 
+    Serial.println(doc["alarm"].as<long>());
+    Serial.println(doc["sensorid"].as<long>());
+  }
   http.end();
 
+  return httpCode;
+}
+
+// Function Declarations
+void readTempHum(void);
+
+void setup() {
+  Serial.begin(115200);
+  Serial.setDebugOutput(true);
+  Serial.println();
+
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+
+  pinMode(LED, OUTPUT);
+
+  dht.begin();
+
+  setupOTA("ESP-SEN1", ssid, password);
+
+  // Register this device with the controller
+  if (!updatedHost) {
+    Serial.println("Updating local variables");
+    if (registerDevice() == 200) {
+      Serial.println("Registration Done");
+      updatedHost = true;
+    }
+  }
+
+    // Check WiFi Connection
+  if ((WiFi.status() != WL_CONNECTED)) {
+    // Host need to re-register
+    updatedHost = false;
+    Serial.println("Lost Connection!");
+    // WiFi.reconnect();
+    WiFi.disconnect();
+    
+    WiFi.reconnect();
+    delay(10000);
+  }
 }
 
 void loop() {
@@ -95,59 +204,40 @@ void loop() {
   ledStatus = !ledStatus;
   digitalWrite(LED, ledStatus);
 
+  readTempHum();
 
+  // Confirm MQTT Connection
+  if (!client.connected()) {
+    reconnect();    
+  }
+  client.loop();
 
 }
 
-// void updateLocaleVariables() {
-//   HTTPClient http;
+// Read the temperature and humidity values
+void readTempHum() {
+  // Set the Global Variables
+  temperature = dht.readTemperature();
+  humidity = dht.readHumidity();
 
-//   Serial.print("[HTTP] registration...\n");
-//   TelnetStream.print("[HTTP] registration...\n");
+  Serial.print("Temp: ");
+  Serial.println(temperature);
 
-//   // String url = "http://";
-//   // url += serverName + ":";
-//   // url += String() + serverPort;
-//   // url += "/devices/register";
+  // Determine if it changed and only publish them
+  if (temperature != extTemp) {
+    Serial.println("Publish Temperature!!!");
+    extTemp = temperature;
+    temp_String = String(extTemp);
+    temp_String.toCharArray(tempString, temp_String.length() + 1);
+    client.publish(MQTT_TEMP, tempString);
+  }
 
-//   // url += "?ip=" + ip_addr;
-//   // url += "&host=" + hostname;
-//   // url += "&type=CAM";
+  if (humidity != hum) {
+    hum = humidity;
+    temp_String = String(hum);
+    temp_String.toCharArray(tempString, temp_String.length() + 1);
+    client.publish(MQTT_HUM, tempString);    
+  }
+}
 
-//   // TelnetStream.println(url);
-//   String url = "http://192.168.1.35:8000/devices/register/?ip=192.168.1.32&host=test&type=SEN";
 
-//   http.begin(url);
-
-//   Serial.print("[HTTP GET...\n");
-//   int httpCode = http.GET();
-
-//   if(httpCode > 0) {
-//     Serial.printf("[HTTP] GET... code: %d\n", httpCode);
-
-//     if (httpCode == HTTP_CODE_OK) {
-//       // Parse JSON Response
-//       const size_t capacity = JSON_OBJECT_SIZE(6) + 150;
-//       DynamicJsonDocument doc(capacity);
-//       DeserializationError error = deserializeJson(doc, http.getString());
-//       if (error) {
-//         Serial.print("deserializeJson() failed: ");
-//         TelnetStream.print("deserializeJson() failed: ");
-//         Serial.println(error.f_str());
-//         http.end();
-//         return;
-//       }
-
-//       // Extract JSON
-//       alarm = doc["alarm"];
-//       // useLed = doc["flash"];
-//       // picInterval = doc["picInterval"];
-//       // camStatus = doc["camStatus"];
-//       // sleepMode = doc["sleep"];
-//       } else {
-//         TelnetStream.print("HTTP request failed with error: ");
-//         TelnetStream.println(httpCode);
-//       }
-//     http.end();
-//   }
-// }
