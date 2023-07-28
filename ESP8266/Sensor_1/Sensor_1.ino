@@ -14,12 +14,13 @@
 #include "ClickButton.h"
 
 
+
 // Declaration of MQTT Topics
-#define MQTT_TEMP "esp2/temp"
-#define MQTT_HUM "esp2/hum"
+#define MQTT_TEMP "esp/temp"
+#define MQTT_HUM "esp/hum"
 #define MQTT_ALARM "alarm"
 #define MQTT_ALARM_TRIG "alarmtrigger"
-#define MQTT_BUTTON "esp2/button"
+#define MQTT_BUTTON "esp/button"
 
 #define LED 2                                   // Onboard LED
 #define TEMP_HUM_PIN D1                         // DHT Pin
@@ -39,16 +40,24 @@ String serverPath = "/devices/register/";       // Registration Endpoint
 const int Id = 1;                               // This is the Sensor identifier.
 const int serverPort = 8000;                    // Server Port 
 String hostName = "ESP2-Sensor";                // Setting the Device Hostname
-String firmware = "0.2";
+String firmware = "0.3";
 int counter = 0;
 bool updatedHost = false;                       // Indicate if Controller have been notified
+String sensorid = "0";
+
+// Buzzer Configs
+int frequency = 523;                           // Specified in Hz
+const unsigned long buzAlarmInterval = 1000;
+unsigned long buzPreviousMillis = 0;
+int timeOff=1000;
 
 bool alarmArmed = false;                        // This variable show if the alarm is armed
-bool alarmTriggered = false;                    // Variable if Alarm is triggered
+// bool alarmTriggered = false;                    // Variable if Alarm is triggered
+String alarmTriggered = "0";                      // 0 = Off, 1 = Audible, 2 = Visual, 3 = Both
 bool alarmUseLed = true;                        // Using Visual Alarm
 bool alarmUseBuzzer = false;                    // Using Audible alarm
 bool alarmLedState = false;                     // Alarm LED
-bool alarmBuzzerState = false;
+bool alarmBuzzerState = true;
 
 const unsigned long ledInterval = 1000;         // Blink ledInterval for alarmArmed LED
 const unsigned long ledAlarmInterval = 300;     // Blink Interval for Alarm LED
@@ -81,6 +90,13 @@ int hum = 0;
 int temperature = 0;
 int humidity = 0;
 
+
+// void tone(uint8_t _pin, unsigned int frequency, unsigned long duration) {
+//   analogWriteFreq(frequency);
+//   analogWrite(_pin, 500);
+//   delay(duration);
+//   analogWrite(_pin, 0);
+// }
 
 void setup_wifi() {
 
@@ -128,16 +144,30 @@ void callback(char* topic, byte* payload, unsigned int length) {
       // digitalWrite(LED, LOW);
     }
   } else if (strcmp(topic, MQTT_ALARM_TRIG) == 0) {  // Alarm is Triggered
-    if (message.toInt() == 1) {
-      alarmTriggered = true;
-    } else {
-      alarmTriggered = false;
-    }
+    if (message.toInt() == 0) {
+      alarmUseBuzzer = false;
+      alarmUseLed = false;
+      Serial.println("Alarm - OFF!");
+    } else if (message.toInt() == 1) {
+      alarmUseBuzzer = true;
+      Serial.println("Alarm - Buzzer!");
+    } else if (message.toInt() == 2) {
+      alarmUseLed = true;
+      Serial.println("Alarm - LED!");
+    } else if (message.toInt() == 3) {
+      alarmUseBuzzer = true;
+      alarmUseLed = true;
+      Serial.println("Alarm - Buzzer + LED!");
+    } 
   }
 }
 
 // Reconnect to MQTT
 void reconnect() {
+
+  String announceTopic = "esp/lwt/" + sensorid;
+
+
   // Loop until we are connected
   while (!client.connected()) {
     Serial.println("Attempting to connect to MQTT");
@@ -145,10 +175,10 @@ void reconnect() {
     String clientId = "ESP8266Client-";
     clientId += String(random(0xffff), HEX);
     // Attempt to connect
-    if (client.connect(clientId.c_str())) {
+    if (client.connect(clientId.c_str(), "","", announceTopic.c_str(), 0, 0, "bye", false)) {
       Serial.println("Connected!");
       // Publish announcement
-      client.publish("esp/announce", "Hello ESP2");
+      client.publish(announceTopic.c_str(), "hello");
       // Subscribe to topics
       client.subscribe("inTopic");
       client.subscribe("alarm");
@@ -179,6 +209,7 @@ int registerDevice() {
 
     Serial.println(doc["alarm"].as<long>());
     Serial.println(doc["sensorid"].as<long>());
+    sensorid = doc["sensorid"].as<long>();        // Update the SensorId
   }
   http.end();
 
@@ -194,7 +225,20 @@ void setup() {
   Serial.println();
 
   setup_wifi();
+
+  // Register this device with the controller
+  while (!updatedHost) {
+    Serial.println("Updating local variables");
+    if (registerDevice() == 200) {
+      Serial.println("Registration Done");
+      updatedHost = true;
+    }
+  }
+
+
   client.setServer(mqtt_server, 1883);
+  client.setKeepAlive(60);                // Keepalive of 15 seconds.
+  // client.setWill(MQTT_WILL, "offline", false, 0);
   client.setCallback(callback);
 
   // Setup PIN Modes
@@ -217,14 +261,7 @@ void setup() {
 
   setupOTA("ESP-SEN1", ssid, password);
 
-  // Register this device with the controller
-  if (!updatedHost) {
-    Serial.println("Updating local variables");
-    if (registerDevice() == 200) {
-      Serial.println("Registration Done");
-      updatedHost = true;
-    }
-  }
+
 
     // Check WiFi Connection
   if ((WiFi.status() != WL_CONNECTED)) {
@@ -275,15 +312,28 @@ void loop() {
       }
 
       if (alarmUseBuzzer) {
-        alarmBuzzerState = HIGH;
-      }
-    } else {
-      alarmLedState = LOW;
-      alarmBuzzerState = LOW;
-    }
+        if (currentMillis - buzPreviousMillis >= buzAlarmInterval) {
+          buzPreviousMillis = currentMillis;
 
+          // Toggle the Buzzer
+          if (alarmBuzzerState == HIGH) {
+            tone(BUZZER, frequency, 600);
+            Serial.println("Buzzer ON");
+            //noTone(BUZZER);
+            alarmBuzzerState = LOW;
+          } else {
+            noTone(BUZZER);
+            Serial.println("Buzzer OFF");
+            // tone(BUZZER, frequency, 600);
+            alarmBuzzerState = HIGH;
+          }
+        }
+      } 
+     
+    }
   } else {
     ledState = HIGH;
+    // alarmBuzzerState = LOW;
   }
 
   // Update the Blue LED
@@ -292,15 +342,16 @@ void loop() {
   digitalWrite(ALARM_LED, alarmLedState);
   digitalWrite(BUZZER, alarmBuzzerState);
 
+  String MQTT_BTN = String(MQTT_BUTTON) + "/" + sensorid;
 
   if (button.clicks == 1) {
     Serial.println("Button Clicked!");
-    client.publish(MQTT_BUTTON, "1");        // 1 = 1 click
+    client.publish(MQTT_BTN.c_str(), "1");        // 1 = 1 click
   }
 
   if (button.clicks == 2) {
     Serial.println("Double Clicked");
-    client.publish(MQTT_BUTTON, "2");        // 2 = Double Click
+    client.publish(MQTT_BTN.c_str(), "2");        // 2 = Double Click
   }
 
   // Read Temperature and Humidity
@@ -323,20 +374,24 @@ void readTempHum() {
   // Serial.print("Temp: ");
   // Serial.println(temperature);
 
+  // Update the Topic to include the sensorId
+  String MQTT_TMP = String(MQTT_TEMP) + "/" + sensorid;
+  String MQTT_HUMI = String(MQTT_HUM) + "/" + sensorid;
+
   // Determine if it changed and only publish them
   if (temperature != extTemp) {
     Serial.println("Publish Temperature!!!");
     extTemp = temperature;
     temp_String = String(extTemp);
     temp_String.toCharArray(tempString, temp_String.length() + 1);
-    client.publish(MQTT_TEMP, tempString);
+    client.publish(MQTT_TMP.c_str(), tempString);
   }
 
   if (humidity != hum) {
     hum = humidity;
     temp_String = String(hum);
     temp_String.toCharArray(tempString, temp_String.length() + 1);
-    client.publish(MQTT_HUM, tempString);    
+    client.publish(MQTT_HUMI.c_str(), tempString);    
   }
 }
 
