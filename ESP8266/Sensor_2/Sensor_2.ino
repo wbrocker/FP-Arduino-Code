@@ -1,4 +1,4 @@
-// This is the 1st Sensor Unit
+// This is the 2nd Sensor Unit
 // Running on: ESP8266
 
 
@@ -37,9 +37,9 @@ char buffer[512];
 
 String serverName = "192.168.1.35";             // Server address for pictures
 String serverPath = "/devices/register/";       // Registration Endpoint
-const int Id = 1;                               // This is the Sensor identifier.
+const int Id = 2;                               // This is the Sensor identifier.
 const int serverPort = 8000;                    // Server Port 
-String hostName = "ESP2-Sensor";                // Setting the Device Hostname
+String hostName = "ESP1-Sensor";                // Setting the Device Hostname
 String firmware = "0.3";
 int counter = 0;
 bool updatedHost = false;                       // Indicate if Controller have been notified
@@ -52,8 +52,7 @@ unsigned long buzPreviousMillis = 0;
 int timeOff=1000;
 
 bool alarmArmed = false;                        // This variable show if the alarm is armed
-// bool alarmTriggered = false;                    // Variable if Alarm is triggered
-String alarmTriggered = "0";                      // 0 = Off, 1 = Audible, 2 = Visual, 3 = Both
+String alarmTriggered = "0";                    // 0 = Off, 1 = Audible, 2 = Visual, 3 = Both
 bool alarmUseLed = true;                        // Using Visual Alarm
 bool alarmUseBuzzer = false;                    // Using Audible alarm
 bool alarmLedState = false;                     // Alarm LED
@@ -90,13 +89,6 @@ int hum = 0;
 int temperature = 0;
 int humidity = 0;
 
-
-// void tone(uint8_t _pin, unsigned int frequency, unsigned long duration) {
-//   analogWriteFreq(frequency);
-//   analogWrite(_pin, 500);
-//   delay(duration);
-//   analogWrite(_pin, 0);
-// }
 
 void setup_wifi() {
 

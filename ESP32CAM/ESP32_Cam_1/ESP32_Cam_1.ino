@@ -13,6 +13,9 @@
 #include "config.h"                            // Config.h keeps secret items like
                                                  // my WiFi Credentials.
 
+// #include "soc/soc.h"
+// #include "soc/rtc_cntl_reg.h"
+
 #define CAMERA_MODEL_AI_THINKER
 #define LED_BUILTIN 4                           // Builtin LED on GPIO4
 
@@ -26,7 +29,7 @@ char buffer[512];
 String serverName = "192.168.1.35";             // Server address for pictures
 String serverPath = "/api/upload/";             // Upload URL for pictures
 String registerPath = "/devices/register/";     // Registration URL
-const int cameraId = 1;                         // This is the camera identifier.
+const int cameraId = 1;                               // This is the camera identifier placeholder.
 const int serverPort = 8000;                    // Server Port 
 
 unsigned long lastPicTaken = 0;                 // Variable for when last pic was taken
@@ -60,6 +63,8 @@ int registerDevice(void);                       // UPdate local variables.
 
 
 void setup() {
+  // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
@@ -424,6 +429,7 @@ int registerDevice() {
     picInterval = doc["picInterval"];
     camStatus = doc["camStatus"];
     sleepMode = doc["sleep"];
+    // cameraId = doc["cameraid"];
   }
   http1.end();
   return httpCode;
