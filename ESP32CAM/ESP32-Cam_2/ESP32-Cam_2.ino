@@ -26,7 +26,7 @@ char buffer[512];
 String serverName = "192.168.1.35";             // Server address for pictures
 String serverPath = "/api/upload/";             // Upload URL for pictures
 String registerPath = "/devices/register/";     // Registration URL
-const int cameraId = 2;                         // This is the camera identifier.
+int cameraId = 2;                               // This is the camera identifier.
 const int serverPort = 8000;                    // Server Port 
 
 unsigned long lastPicTaken = 0;                 // Variable for when last pic was taken
@@ -41,7 +41,7 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const String firmwareVersion = "0.16";          // Firmware Version
+const String firmwareVersion = "0.17";          // Firmware Version
 bool sleepMode = false;                         // Sleep mode flag
 const String hostname = "ESP-CAM-2";            // Hostname
 bool updatedHost = false;                       // Bool to indicate if host updated
@@ -425,6 +425,7 @@ int registerDevice() {
     picInterval = doc["picInterval"];
     camStatus = doc["camStatus"];
     sleepMode = doc["sleep"];
+    cameraId = doc["cameraid"];
   }
   http1.end();
   return httpCode;

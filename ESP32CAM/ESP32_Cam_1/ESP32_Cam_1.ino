@@ -11,8 +11,7 @@
 #include "OTA.h"
 #include <TelnetStream.h>
 #include "config.h"                            // Config.h keeps secret items like
-                                                 // my WiFi Credentials.
-
+                                               // my WiFi Credentials.
 // #include "soc/soc.h"
 // #include "soc/rtc_cntl_reg.h"
 
@@ -29,7 +28,7 @@ char buffer[512];
 String serverName = "192.168.1.35";             // Server address for pictures
 String serverPath = "/api/upload/";             // Upload URL for pictures
 String registerPath = "/devices/register/";     // Registration URL
-const int cameraId = 1;                               // This is the camera identifier placeholder.
+int cameraId = 1;                               // This is the camera identifier placeholder.
 const int serverPort = 8000;                    // Server Port 
 
 unsigned long lastPicTaken = 0;                 // Variable for when last pic was taken
@@ -44,7 +43,7 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const String firmwareVersion = "0.16";          // Firmware Version
+const String firmwareVersion = "0.17";          // Firmware Version
 bool sleepMode = false;                         // Sleep mode flag
 const String hostname = "ESP-CAM-1";            // Hostname
 bool updatedHost = false;                       // Bool to indicate if host updated
@@ -131,9 +130,8 @@ void setup() {
   TelnetStream.println("WiFi Connected!");
   Serial.println("WiFi Connected!");
   // TelnetStream.println(WiFi.localIP());
-  // ip_addr = "192.168.1.32";
   ip_addr = WiFi.localIP().toString();
-  Serial.print(WiFi.localIP());
+//  Serial.print(WiFi.localIP());
   Serial.println("' to connect");
 
   setup_routing();
@@ -247,7 +245,7 @@ String sendPhoto() {
 
     String tail = "\r\n--" + boundary + "\r\n";
     tail += "Content-Disposition: form-data; name=\"cameraId\"\r\n\r\n";
-    tail += cameraIdString + "\r\n";      //"5\r\n";
+    tail += cameraIdString + "\r\n";
     tail += "--" + boundary + "--\r\n";
 
     uint32_t imageLen = fb->len;
@@ -429,7 +427,7 @@ int registerDevice() {
     picInterval = doc["picInterval"];
     camStatus = doc["camStatus"];
     sleepMode = doc["sleep"];
-    // cameraId = doc["cameraid"];
+    cameraId = doc["cameraid"];
   }
   http1.end();
   return httpCode;
