@@ -92,13 +92,6 @@ int temperature = 0;
 int humidity = 0;
 
 
-// void tone(uint8_t _pin, unsigned int frequency, unsigned long duration) {
-//   analogWriteFreq(frequency);
-//   analogWrite(_pin, 500);
-//   delay(duration);
-//   analogWrite(_pin, 0);
-// }
-
 void setup_wifi() {
 
   delay(10);

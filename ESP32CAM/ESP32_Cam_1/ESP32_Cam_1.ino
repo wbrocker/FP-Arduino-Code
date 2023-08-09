@@ -12,11 +12,15 @@
 #include <TelnetStream.h>
 #include "config.h"                            // Config.h keeps secret items like
                                                // my WiFi Credentials.
+#include <PubSubClient.h>
 // #include "soc/soc.h"
 // #include "soc/rtc_cntl_reg.h"
 
 #define CAMERA_MODEL_AI_THINKER
 #define LED_BUILTIN 4                           // Builtin LED on GPIO4
+
+#define MQTT_ALARM "alarm"                      // Alarm Status (Active or Inactive)
+#define MQTT_ALARM_TRIG "alarmtrigger"          // Alarm Trigger
 
 #include "camerapins.h"
 
@@ -36,6 +40,7 @@ unsigned long picInterval = 1000;               // Min interval between pictures
 
 WiFiClient client;
 HTTPClient http;
+PubSubClient pubsubClient(client);
 
 // Pushbutton to test Photo Capture
 const int pirInput = 12;                        // PIR using GPIO12 -
@@ -43,7 +48,7 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const String firmwareVersion = "0.17";          // Firmware Version
+const String firmwareVersion = "0.18";          // Firmware Version
 bool sleepMode = false;                         // Sleep mode flag
 const String hostname = "ESP-CAM-1";            // Hostname
 bool updatedHost = false;                       // Bool to indicate if host updated
@@ -59,6 +64,8 @@ void getStatus(void);                           // Get Camera Status variables
 void takePic(void);                             // Force a PIC to be taken
 void setData(void);                             // POST request to set data on the device
 int registerDevice(void);                       // UPdate local variables.
+void callback(char* topic, byte* payload, unsigned int length);
+void reconnect(void);                           // Reconnecting to MQTT
 
 
 void setup() {
@@ -133,6 +140,11 @@ void setup() {
   ip_addr = WiFi.localIP().toString();
 //  Serial.print(WiFi.localIP());
   Serial.println("' to connect");
+
+  // MQTT Setup
+  pubsubClient.setServer(mqtt_server, 1883);
+  pubsubClient.setKeepAlive(15);
+  pubsubClient.setCallback(callback);
 
   setup_routing();
 }
@@ -430,4 +442,53 @@ int registerDevice() {
   }
   http1.end();
   return httpCode;
+}
+
+// MQTT Callback Function
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+
+  String message = "";
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+    message += ((char)payload[i]);
+  }
+  Serial.println();
+
+  // Check if it matches any topic
+  if (strcmp(topic, MQTT_ALARM) == 0) {       // Alarm Topic Raised
+    if (message.toInt() == 1) {
+      camStatus = true;
+    } else {
+      camStatus = false;
+    }
+  }
+}
+
+// Reconnect to MQTT
+void reconnect() {
+  String announceTopic = "esp/lwt" + cameraId;
+
+  // Loop until connected
+  while (!pubsubClient.connected()) {
+    Serial.println("Attempting to connect to MQTT");
+    // Create random ClientId
+    String clientId = "ESP32CAM-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (pubsubClient.connect(clientId.c_str(), "", "", announceTopic.c_str(), 0, 0, "bye", false)) {
+      Serial.println("Connected to MQTT!");
+      // Publish announcement
+      pubsubClient.publish(announceTopic.c_str(), "hello");
+      // Subscribe to topics
+      pubsubClient.subscribe(MQTT_ALARM);
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(pubsubClient.state());
+      Serial.println(" try again in 5 seconds...");
+      delay(5000);
+    }
+  }
 }
