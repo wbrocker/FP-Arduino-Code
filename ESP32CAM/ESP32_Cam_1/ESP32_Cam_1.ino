@@ -174,7 +174,7 @@ void loop() {
 }
 
 
-// Function to test PIR Sensor.
+// Function to Detect using PIR Sensor.
 void motionDetect() {
   val = digitalRead(pirInput);                // Read the Input
   Serial.println(val);
@@ -201,7 +201,6 @@ void motionDetect() {
       pirState = HIGH;
     }
   } else {
-    // Serial.println("State is LOW");
     if (pirState == HIGH) {
       // Motion stopped now
       Serial.println("Motion Ended!");

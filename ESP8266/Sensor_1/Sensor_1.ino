@@ -12,6 +12,7 @@
 #include "DHT.h"
 #include <PubSubClient.h>
 #include "ClickButton.h"
+#include <stdlib.h>
 
 
 
@@ -40,7 +41,7 @@ String serverPath = "/devices/register/";       // Registration Endpoint
 const int Id = 1;                               // This is the Sensor identifier.
 const int serverPort = 8000;                    // Server Port 
 String hostName = "ESP2-Sensor";                // Setting the Device Hostname
-String firmware = "0.3";
+String firmware = "0.4";
 int counter = 0;
 bool updatedHost = false;                       // Indicate if Controller have been notified
 String sensorid = "0";
@@ -141,20 +142,27 @@ void callback(char* topic, byte* payload, unsigned int length) {
       // digitalWrite(ALARM_LED, HIGH);
     } else {
       alarmArmed = false;
+
       // digitalWrite(LED, LOW);
     }
   } else if (strcmp(topic, MQTT_ALARM_TRIG) == 0) {  // Alarm is Triggered
     if (message.toInt() == 0) {
+      alarmTriggered = "0";
       alarmUseBuzzer = false;
+      alarmBuzzerState = LOW;
+      noTone(BUZZER);
       alarmUseLed = false;
       Serial.println("Alarm - OFF!");
     } else if (message.toInt() == 1) {
+      alarmTriggered = "1";
       alarmUseBuzzer = true;
       Serial.println("Alarm - Buzzer!");
     } else if (message.toInt() == 2) {
+      alarmTriggered = "2";
       alarmUseLed = true;
       Serial.println("Alarm - LED!");
     } else if (message.toInt() == 3) {
+      alarmTriggered = "3";
       alarmUseBuzzer = true;
       alarmUseLed = true;
       Serial.println("Alarm - Buzzer + LED!");
@@ -208,6 +216,34 @@ int registerDevice() {
     deserializeJson(doc, http.getStream());
 
     Serial.println(doc["alarm"].as<long>());
+
+    // Update Alarm status
+    if (doc["alarm"] == 1) {
+      alarmArmed = true;
+      Serial.println("Alarm Armed!");
+    } else {
+      alarmArmed = false;
+      Serial.println("Alarm NOT ARMED!");
+    }
+    
+    alarmTriggered = doc["alarmtrigger"].as<long>();
+
+    // Update current alarm
+    if (alarmTriggered == "0") { // Alarm is off
+      alarmUseLed = false;
+      alarmUseBuzzer = false;
+      alarmBuzzerState = LOW;
+    } else if (alarmTriggered == "1") {  // Audible Alarm
+      alarmUseBuzzer = true;
+      alarmUseLed = false;
+    } else if (alarmTriggered == "2") {  // Visual Alarm
+      alarmUseBuzzer = false;
+      alarmUseLed = true;
+    } else if (alarmTriggered == "3") { // Use Both
+      alarmUseLed = true;
+      alarmUseBuzzer = true;  
+    }
+
     Serial.println(doc["sensorid"].as<long>());
     sensorid = doc["sensorid"].as<long>();        // Update the SensorId
   }
@@ -237,7 +273,7 @@ void setup() {
 
 
   client.setServer(mqtt_server, 1883);
-  client.setKeepAlive(60);                // Keepalive of 15 seconds.
+  client.setKeepAlive(15);                // Keepalive of 15 seconds.
   // client.setWill(MQTT_WILL, "offline", false, 0);
   client.setCallback(callback);
 
@@ -297,7 +333,7 @@ void loop() {
     }
 
     // Other actions for Alarm... If Alarm Triggered
-    if (alarmTriggered) {
+    if (alarmTriggered != "0") {
       if (alarmUseLed) {
         if (currentMillis - previousMillisAlarm >= ledAlarmInterval) {
           previousMillisAlarm = currentMillis;
@@ -312,6 +348,8 @@ void loop() {
       }
 
       if (alarmUseBuzzer) {
+        Serial.println("enterting AlarmUseBuzzer");
+
         if (currentMillis - buzPreviousMillis >= buzAlarmInterval) {
           buzPreviousMillis = currentMillis;
 
@@ -328,11 +366,22 @@ void loop() {
             alarmBuzzerState = HIGH;
           }
         }
-      } 
+      } else {    // Ensure the Buzzer is turned off.
+          Serial.println("Force Buzzer Off");
+          noTone(BUZZER);
+          alarmBuzzerState = HIGH;
+      }
      
+    } else {
+      noTone(BUZZER);
+      alarmLedState = LOW;
+
     }
   } else {
+    // ledState = HIGH;
     ledState = HIGH;
+    noTone(BUZZER);
+    alarmBuzzerState = LOW;
     // alarmBuzzerState = LOW;
   }
 
@@ -340,7 +389,7 @@ void loop() {
   digitalWrite(LED, ledState);
   // Update RED Alarm LED
   digitalWrite(ALARM_LED, alarmLedState);
-  digitalWrite(BUZZER, alarmBuzzerState);
+  //digitalWrite(BUZZER, alarmBuzzerState);
 
   String MQTT_BTN = String(MQTT_BUTTON) + "/" + sensorid;
 
