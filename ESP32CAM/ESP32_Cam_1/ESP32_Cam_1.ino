@@ -183,6 +183,12 @@ void loop() {
     WiFi.reconnect();
     delay(10000);
   }
+
+  // Confirm MQTT Connection
+  if (!pubsubClient.connected()) {
+    reconnect();
+  }
+  pubsubClient.loop();
 }
 
 
@@ -446,13 +452,13 @@ int registerDevice() {
 
 // MQTT Callback Function
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
+  TelnetStream.print("Message arrived [");
+  TelnetStream.print(topic);
+  TelnetStream.print("] ");
 
   String message = "";
   for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+    TelnetStream.print((char)payload[i]);
     message += ((char)payload[i]);
   }
   Serial.println();
@@ -460,9 +466,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // Check if it matches any topic
   if (strcmp(topic, MQTT_ALARM) == 0) {       // Alarm Topic Raised
     if (message.toInt() == 1) {
+      TelnetStream.println("Camera Activated");
       camStatus = true;
     } else {
       camStatus = false;
+      TelnetStream.println("Camera De-Activated");
     }
   }
 }
@@ -473,21 +481,21 @@ void reconnect() {
 
   // Loop until connected
   while (!pubsubClient.connected()) {
-    Serial.println("Attempting to connect to MQTT");
+    TelnetStream.println("Attempting to connect to MQTT");
     // Create random ClientId
     String clientId = "ESP32CAM-";
     clientId += String(random(0xffff), HEX);
     // Attempt to connect
     if (pubsubClient.connect(clientId.c_str(), "", "", announceTopic.c_str(), 0, 0, "bye", false)) {
-      Serial.println("Connected to MQTT!");
+      TelnetStream.println("Connected to MQTT!");
       // Publish announcement
       pubsubClient.publish(announceTopic.c_str(), "hello");
       // Subscribe to topics
-      pubsubClient.subscribe(MQTT_ALARM);
+      pubsubClient.subscribe("alarm");
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(pubsubClient.state());
-      Serial.println(" try again in 5 seconds...");
+      TelnetStream.print("failed, rc=");
+      TelnetStream.print(pubsubClient.state());
+      TelnetStream.println(" try again in 5 seconds...");
       delay(5000);
     }
   }
