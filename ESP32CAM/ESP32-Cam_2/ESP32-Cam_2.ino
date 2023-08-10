@@ -10,11 +10,17 @@
 #include <WebServer.h>
 #include "OTA.h"
 #include <TelnetStream.h>
-#include "config.h"                              // Config.h keeps secret items like
-                                                // my WiFi Credentials.
+#include "config.h"                            // Config.h keeps secret items like
+                                               // my WiFi Credentials.
+#include <PubSubClient.h>
+// #include "soc/soc.h"
+// #include "soc/rtc_cntl_reg.h"
 
 #define CAMERA_MODEL_AI_THINKER
 #define LED_BUILTIN 4                           // Builtin LED on GPIO4
+
+#define MQTT_ALARM "alarm"                      // Alarm Status (Active or Inactive)
+#define MQTT_ALARM_TRIG "alarmtrigger"          // Alarm Trigger
 
 #include "camerapins.h"
 
@@ -26,7 +32,7 @@ char buffer[512];
 String serverName = "192.168.1.35";             // Server address for pictures
 String serverPath = "/api/upload/";             // Upload URL for pictures
 String registerPath = "/devices/register/";     // Registration URL
-int cameraId = 2;                               // This is the camera identifier.
+int cameraId = 1;                               // This is the camera identifier placeholder.
 const int serverPort = 8000;                    // Server Port 
 
 unsigned long lastPicTaken = 0;                 // Variable for when last pic was taken
@@ -34,6 +40,7 @@ unsigned long picInterval = 1000;               // Min interval between pictures
 
 WiFiClient client;
 HTTPClient http;
+PubSubClient pubsubClient(client);
 
 // Pushbutton to test Photo Capture
 const int pirInput = 12;                        // PIR using GPIO12 -
@@ -41,7 +48,7 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const String firmwareVersion = "0.17";          // Firmware Version
+const String firmwareVersion = "0.18";          // Firmware Version
 bool sleepMode = false;                         // Sleep mode flag
 const String hostname = "ESP-CAM-2";            // Hostname
 bool updatedHost = false;                       // Bool to indicate if host updated
@@ -57,9 +64,13 @@ void getStatus(void);                           // Get Camera Status variables
 void takePic(void);                             // Force a PIC to be taken
 void setData(void);                             // POST request to set data on the device
 int registerDevice(void);                       // UPdate local variables.
+void callback(char* topic, byte* payload, unsigned int length);
+void reconnect(void);                           // Reconnecting to MQTT
 
 
 void setup() {
+  // WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
   Serial.setDebugOutput(true);
   Serial.println();
@@ -68,7 +79,6 @@ void setup() {
   
   // Configure the Pushbutton as Input.
   // This will now be used to trigger the camera.
-  //  pinMode(pushButton, INPUT);
   pinMode(pirInput, INPUT_PULLDOWN);
 
   // Configure Builtin LED as Output
@@ -103,8 +113,8 @@ void setup() {
     config.jpeg_quality = 10;
     config.fb_count = 2;
   } else {
-    config.frame_size = FRAMESIZE_VGA;
-    config.jpeg_quality = 10;
+    config.frame_size = FRAMESIZE_SVGA;
+    config.jpeg_quality = 12;
     config.fb_count = 1;
   }
 
@@ -113,9 +123,7 @@ void setup() {
 
   sensor_t * s = esp_camera_sensor_get();
   s->set_vflip(s, 1);
-  s->set_hmirror(s, 1);
-  s->set_contrast(s, 2);
-  s->set_saturation(s, -2);
+  s->set_hmirror(s, 0);
 
   // Start Wifi
   WiFi.begin(ssid, password);
@@ -128,9 +136,14 @@ void setup() {
   TelnetStream.begin();
   TelnetStream.println("WiFi Connected!");
   Serial.println("WiFi Connected!");
-  TelnetStream.println(WiFi.localIP());
-  //Serial.print(WiFi.localIP());
+  // TelnetStream.println(WiFi.localIP());
+  ip_addr = WiFi.localIP().toString();
   Serial.println("' to connect");
+
+  // MQTT Setup
+  pubsubClient.setServer(mqtt_server, 1883);
+  pubsubClient.setKeepAlive(15);
+  pubsubClient.setCallback(callback);
 
   setup_routing();
 }
@@ -169,10 +182,16 @@ void loop() {
     WiFi.reconnect();
     delay(10000);
   }
+
+  // Confirm MQTT Connection
+  if (!pubsubClient.connected()) {
+    reconnect();
+  }
+  pubsubClient.loop();
 }
 
 
-// Function to test PIR Sensor.
+// Function to Detect using PIR Sensor.
 void motionDetect() {
   val = digitalRead(pirInput);                // Read the Input
   Serial.println(val);
@@ -182,7 +201,7 @@ void motionDetect() {
       TelnetStream.println("Motion detected!");
       Serial.println("Motion Detected!");
       if ((millis() - lastPicTaken >= picInterval) && camStatus) {
-        if (useLed) {                         // Enable Flash
+        if (useLed) {   // Enable Flash
           // getCSRF();
           digitalWrite(LED_BUILTIN, HIGH);    // Enable the Flash
           delay(200);
@@ -199,7 +218,6 @@ void motionDetect() {
       pirState = HIGH;
     }
   } else {
-    // Serial.println("State is LOW");
     if (pirState == HIGH) {
       // Motion stopped now
       Serial.println("Motion Ended!");
@@ -357,11 +375,12 @@ void create_json(char *tag, float value) {
 
 void add_json_object(char *tag, float value) {
   JsonObject obj = jsonDocument.createNestedObject();
-  obj["type"] = tag;
-  obj["value"] = value;
+  // obj["type"] = tag;
+  // obj["value"] = value;
+  obj[tag] = value;
 }
 
-// Force a pic to be taken and uploaded.
+
 void takePic() {
   TelnetStream.println("Force Picture");
   // getCSRF();
@@ -370,7 +389,6 @@ void takePic() {
   server.send(200, "application/json", "{}");
 }
 
-// API to get current status of ESP32 Device
 void getStatus() {
   TelnetStream.println("Retrieve all settings");
   jsonDocument.clear();
@@ -429,4 +447,55 @@ int registerDevice() {
   }
   http1.end();
   return httpCode;
+}
+
+// MQTT Callback Function
+void callback(char* topic, byte* payload, unsigned int length) {
+  TelnetStream.print("Message arrived [");
+  TelnetStream.print(topic);
+  TelnetStream.print("] ");
+
+  String message = "";
+  for (int i = 0; i < length; i++) {
+    TelnetStream.print((char)payload[i]);
+    message += ((char)payload[i]);
+  }
+  Serial.println();
+
+  // Check if it matches any topic
+  if (strcmp(topic, MQTT_ALARM) == 0) {       // Alarm Topic Raised
+    if (message.toInt() == 1) {
+      TelnetStream.println("Camera Activated");
+      camStatus = true;
+    } else {
+      camStatus = false;
+      TelnetStream.println("Camera De-Activated");
+    }
+  }
+}
+
+// Reconnect to MQTT
+void reconnect() {
+  String announceTopic = "esp/lwt" + cameraId;
+
+  // Loop until connected
+  while (!pubsubClient.connected()) {
+    TelnetStream.println("Attempting to connect to MQTT");
+    // Create random ClientId
+    String clientId = "ESP32CAM-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (pubsubClient.connect(clientId.c_str(), "", "", announceTopic.c_str(), 0, 0, "bye", false)) {
+      TelnetStream.println("Connected to MQTT!");
+      // Publish announcement
+      pubsubClient.publish(announceTopic.c_str(), "hello");
+      // Subscribe to topics
+      pubsubClient.subscribe("alarm");
+    } else {
+      TelnetStream.print("failed, rc=");
+      TelnetStream.print(pubsubClient.state());
+      TelnetStream.println(" try again in 5 seconds...");
+      delay(5000);
+    }
+  }
 }
