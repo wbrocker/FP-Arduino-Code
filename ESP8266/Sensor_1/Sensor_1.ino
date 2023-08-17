@@ -281,7 +281,7 @@ void setup() {
   digitalWrite(ALARM_LED, LOW);
   digitalWrite(BUZZER, LOW);
 
-  button.debounceTime = 20;
+  button.debounceTime = 50;
   button.multiclickTime = 250;
   button.longClickTime = 1000;
 
@@ -436,5 +436,3 @@ void readTempHum() {
     client.publish(MQTT_HUMI.c_str(), tempString);    
   }
 }
-
-
