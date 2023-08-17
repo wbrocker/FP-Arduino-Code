@@ -21,6 +21,7 @@
 
 #define MQTT_ALARM "alarm"                      // Alarm Status (Active or Inactive)
 #define MQTT_ALARM_TRIG "alarmtrigger"          // Alarm Trigger
+#define MQTT_PIC "takepic"                      // Topic to initiate a picture
 
 #include "camerapins.h"
 
@@ -48,7 +49,7 @@ int pirState = LOW;                             // State is used for motion
 int val = 0;
 bool useLed = true;                             // Using LED
 bool camStatus = true;                          // Camera enabled/disabled
-const String firmwareVersion = "0.18";          // Firmware Version
+const String firmwareVersion = "0.19";          // Firmware Version
 bool sleepMode = false;                         // Sleep mode flag
 const String hostname = "ESP-CAM-1";            // Hostname
 bool updatedHost = false;                       // Bool to indicate if host updated
@@ -472,6 +473,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
       camStatus = false;
       TelnetStream.println("Camera De-Activated");
     }
+  } else if (strcmp(topic, MQTT_PIC) == 0) {  // Force a picture
+    // If the massage contains 0 (for all cam's) or the cameraId of
+    // the current camera, take a picture.
+    if ((message.toInt() == 0) || (message.toInt() == cameraId)) {
+      TelnetStream.println("Taking a forced picture");
+      takePic();
+    }
+
   }
 }
 
@@ -492,6 +501,7 @@ void reconnect() {
       pubsubClient.publish(announceTopic.c_str(), "hello");
       // Subscribe to topics
       pubsubClient.subscribe("alarm");
+      pubsubClient.subscribe("takepic");
     } else {
       TelnetStream.print("failed, rc=");
       TelnetStream.print(pubsubClient.state());
