@@ -41,7 +41,7 @@ String serverPath = "/devices/register/";       // Registration Endpoint
 const int Id = 1;                               // This is the Sensor identifier.
 const int serverPort = 8000;                    // Server Port 
 String hostName = "ESP2-Sensor";                // Setting the Device Hostname
-String firmware = "0.4";
+String firmware = "0.5";
 int counter = 0;
 bool updatedHost = false;                       // Indicate if Controller have been notified
 String sensorid = "0";
@@ -142,9 +142,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if (message.toInt() == 0) {
       alarmTriggered = "0";
       alarmUseBuzzer = false;
-      alarmBuzzerState = LOW;
-      noTone(BUZZER);
+      alarmBuzzerState = false;
+//      noTone(BUZZER);
       alarmUseLed = false;
+      digitalWrite(ALARM_LED, LOW);
       Serial.println("Alarm - OFF!");
     } else if (message.toInt() == 1) {
       alarmTriggered = "1";
@@ -225,7 +226,7 @@ int registerDevice() {
     if (alarmTriggered == "0") { // Alarm is off
       alarmUseLed = false;
       alarmUseBuzzer = false;
-      alarmBuzzerState = LOW;
+      alarmBuzzerState = true;
     } else if (alarmTriggered == "1") {  // Audible Alarm
       alarmUseBuzzer = true;
       alarmUseLed = false;
@@ -279,7 +280,8 @@ void setup() {
   // Initialise default values
   digitalWrite(LED, LOW);
   digitalWrite(ALARM_LED, LOW);
-  digitalWrite(BUZZER, LOW);
+//  noTone(BUZZER);
+  digitalWrite(BUZZER, HIGH);
 
   button.debounceTime = 50;
   button.multiclickTime = 250;
@@ -348,34 +350,31 @@ void loop() {
 
           // Toggle the Buzzer
           if (alarmBuzzerState == HIGH) {
-            tone(BUZZER, frequency, 600);
+            digitalWrite(BUZZER, LOW);
             Serial.println("Buzzer ON");
-            //noTone(BUZZER);
             alarmBuzzerState = LOW;
           } else {
-            noTone(BUZZER);
+            digitalWrite(BUZZER, HIGH);
             Serial.println("Buzzer OFF");
-            // tone(BUZZER, frequency, 600);
             alarmBuzzerState = HIGH;
           }
         }
       } else {    // Ensure the Buzzer is turned off.
           Serial.println("Force Buzzer Off");
-          noTone(BUZZER);
+          digitalWrite(BUZZER, HIGH);
           alarmBuzzerState = HIGH;
       }
      
     } else {
-      noTone(BUZZER);
+      digitalWrite(BUZZER, HIGH);
       alarmLedState = LOW;
 
     }
   } else {
     // ledState = HIGH;
     ledState = HIGH;
-    noTone(BUZZER);
-    alarmBuzzerState = LOW;
-    // alarmBuzzerState = LOW;
+    digitalWrite(BUZZER, HIGH);
+    alarmBuzzerState = HIGH;
   }
 
   // Update the Blue LED
