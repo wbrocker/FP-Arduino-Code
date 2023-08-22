@@ -40,7 +40,7 @@ String serverName = "192.168.1.35";             // Server address for pictures
 String serverPath = "/devices/register/";       // Registration Endpoint
 const int Id = 1;                               // This is the Sensor identifier.
 const int serverPort = 8000;                    // Server Port 
-String hostName = "ESP2-Sensor";                // Setting the Device Hostname
+String hostName = "ESP1-Sensor";                // Setting the Device Hostname
 String firmware = "0.5";
 int counter = 0;
 bool updatedHost = false;                       // Indicate if Controller have been notified
@@ -177,6 +177,7 @@ void reconnect() {
     String clientId = "ESP8266Client-";
     clientId += String(random(0xffff), HEX);
     // Attempt to connect
+    client.setKeepAlive(60);
     if (client.connect(clientId.c_str(), "","", announceTopic.c_str(), 0, 0, "bye", false)) {
       Serial.println("Connected!");
       // Publish announcement
