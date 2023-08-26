@@ -6,6 +6,8 @@
 
 Welcome to the Arduino Components repository for the IoT Wildlife and Intrusion Detection System. This repository contains the Arduino code and related resources for the hardware components used in the project. These components play a crucial role in detecting motion, capturing images, measuring temperature, and providing alerts.
 
+The Django repository can be found at <a href="https://github.com/wbrocker/FP-Django">FP-Django</a>.
+
 ## Features
 
 - **ESP32-Cam Motion Detection**: The ESP32-Cam device, equipped with a PIR sensor, captures images when motion is detected and uploads them to the main controller.
