@@ -1,7 +1,5 @@
 # BSc Final Project - IoT Wildlife and Intrusion Detection System - Arduino Components
 
-[Project Overview Image: Optional]
-
 ## Introduction
 
 Welcome to the Arduino Components repository for the IoT Wildlife and Intrusion Detection System. This repository contains the Arduino code and related resources for the hardware components used in the project. These components play a crucial role in detecting motion, capturing images, measuring temperature, and providing alerts.
